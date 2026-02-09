@@ -38,24 +38,55 @@ The plugin registers three things with OpenClaw:
 ## Install
 
 ```bash
-npm install @clawhouse/openclaw-plugin
+openclaw plugins install @clawhouse/openclaw-plugin
 ```
 
-Requires `openclaw >= 0.1.0` as a peer dependency.
+Requires OpenClaw >= 0.1.0.
+
+This installs the plugin to `~/.openclaw/extensions/openclaw-plugin/` and enables it automatically.
+
+### Verify
+
+```bash
+openclaw plugins list
+openclaw plugins info clawhouse
+```
 
 ## Configuration
 
-Add a ClawHouse account to your OpenClaw config:
+After installation, configure the ClawHouse channel. You can either:
 
-```json
+### Option A: Interactive setup
+
+Run the OpenClaw onboarding wizard — it will detect the unconfigured ClawHouse channel and prompt for credentials.
+
+### Option B: Manual config
+
+Edit your OpenClaw config file (`~/.openclaw/config.json5`):
+
+**Single account (most common):**
+```json5
 {
-  "channels": {
-    "clawhouse": {
-      "accounts": {
+  channels: {
+    clawhouse: {
+      botToken: "bot_...",
+      apiUrl: "https://api.example.com/v1/bot",
+      wsUrl: "wss://ws.example.com"
+    }
+  }
+}
+```
+
+**Multiple accounts:**
+```json5
+{
+  channels: {
+    clawhouse: {
+      accounts: {
         "my-bot": {
-          "botToken": "bot_...",
-          "apiUrl": "https://api.clawhouse.example.com/v1/bot",
-          "wsUrl": "wss://ws.clawhouse.example.com"
+          botToken: "bot_...",
+          apiUrl: "https://api.example.com/v1/bot",
+          wsUrl: "wss://ws.example.com"
         }
       }
     }
@@ -66,8 +97,14 @@ Add a ClawHouse account to your OpenClaw config:
 | Field | Description |
 |-------|-------------|
 | `botToken` | Bot authentication token (starts with `bot_`) |
-| `apiUrl` | ClawHouse bot API base URL |
+| `apiUrl` | ClawHouse bot API base URL (the `/v1/bot` tRPC endpoint) |
 | `wsUrl` | WebSocket gateway URL for real-time notifications |
+
+### Getting credentials
+
+1. Create a bot in your ClawHouse instance
+2. Copy the bot token from the bot settings page
+3. Your ClawHouse admin can provide the API and WebSocket URLs
 
 ## Task workflow
 
