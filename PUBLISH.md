@@ -81,7 +81,7 @@ All versions are published from `main`. No release branches needed.
 The trusted publisher is configured on npmjs.com under the package settings:
 
 - Owner: `clawhouse`
-- Repository: `openclaw-plugin`
+- Repository: `clawhouse-openclaw`
 - Workflow: `publish.yml`
 - Environment: *(blank)*
 

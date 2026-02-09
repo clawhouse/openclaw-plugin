@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/clawhouse/openclaw-plugin.git"
+    "url": "https://github.com/clawhouse/clawhouse-openclaw.git"
   },
   "peerDependencies": {
     "openclaw": ">=0.1.0"
