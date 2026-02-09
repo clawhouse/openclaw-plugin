@@ -1,0 +1,252 @@
+/**
+ * Minimal type definitions for the OpenClaw plugin API.
+ * These mirror the actual OpenClaw types but are defined inline
+ * to avoid a hard dependency on the openclaw package at build time.
+ * At runtime, the real types are provided by OpenClaw.
+ */
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+// Tool types for plugin tool registration
+export interface AnyAgentTool {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  execute: (
+    id: string,
+    params: Record<string, unknown>,
+  ) => Promise<{ content: Array<{ type: string; text?: string }> }>;
+  optional?: boolean;
+}
+
+export interface OpenClawPluginToolContext {
+  config?: unknown;
+  messageChannel?: unknown;
+  agentAccountId?: string;
+  sandboxed?: boolean;
+}
+
+export type OpenClawPluginToolFactory = (
+  ctx: OpenClawPluginToolContext,
+) => AnyAgentTool | AnyAgentTool[] | null | undefined;
+
+export interface OpenClawPluginToolOptions {
+  optional?: boolean;
+}
+
+// Plugin API provided by OpenClaw at registration time
+export interface OpenClawPluginApi {
+  runtime: PluginRuntime;
+  config: unknown;
+  pluginConfig: unknown;
+  logger: PluginLogger;
+  registerChannel(registration: { plugin: ChannelPlugin }): void;
+  registerHttpRoute(params: {
+    path: string;
+    handler: (req: IncomingMessage, res: ServerResponse) => Promise<void> | void;
+  }): void;
+  registerTool(
+    tool: AnyAgentTool | OpenClawPluginToolFactory,
+    opts?: OpenClawPluginToolOptions,
+  ): void;
+}
+
+// Subset of PluginRuntime we actually use
+export interface PluginRuntime {
+  config: {
+    loadConfig(): unknown;
+  };
+  channel: {
+    reply: {
+      finalizeInboundContext<T extends Record<string, unknown>>(
+        ctx: T,
+      ): T & FinalizedMsgContext;
+      dispatchReplyFromConfig(params: {
+        ctx: FinalizedMsgContext;
+        cfg: unknown;
+        dispatcher: ReplyDispatcher;
+      }): Promise<{ queuedFinal: boolean }>;
+      createReplyDispatcherWithTyping(params: unknown): ReplyDispatcher;
+    };
+    text: {
+      chunkMarkdownText(text: string, limit: number): string[];
+    };
+  };
+  logging: {
+    createLogger(name: string): PluginLogger;
+  };
+  state: {
+    resolveStorePath(subpath: string): string;
+  };
+}
+
+export interface FinalizedMsgContext {
+  Body: string;
+  RawBody?: string;
+  ChatType: string;
+  Provider: string;
+  Surface: string;
+  From: string;
+  To: string;
+  MessageSid: string;
+  Timestamp?: string;
+  BodyForAgent?: string;
+  [key: string]: unknown;
+}
+
+export interface ReplyDispatcher {
+  send(reply: unknown): Promise<void>;
+  getQueuedCounts(): unknown;
+}
+
+export interface PluginLogger {
+  info(msg: string): void;
+  warn(msg: string): void;
+  error(msg: string): void;
+  debug(msg: string): void;
+}
+
+// Channel plugin interfaces
+export interface ChannelPlugin {
+  id: string;
+  meta: ChannelMeta;
+  capabilities: ChannelCapabilities;
+  config: ChannelConfigAdapter;
+  outbound?: ChannelOutboundAdapter;
+  gateway?: ChannelGatewayAdapter;
+  setup?: ChannelSetupAdapter;
+  security?: ChannelSecurityAdapter;
+}
+
+export interface ChannelMeta {
+  name: string;
+  icon?: string;
+  description?: string;
+}
+
+export interface ChannelCapabilities {
+  text: boolean;
+  media: boolean;
+  reactions: boolean;
+  threads: boolean;
+  editing: boolean;
+}
+
+export interface ChannelConfigAdapter {
+  listAccountIds(cfg: unknown): string[];
+  resolveAccount(cfg: unknown, accountId?: string | null): ResolvedClawHouseAccount;
+  isConfigured?(account: ResolvedClawHouseAccount, cfg: unknown): boolean;
+  isEnabled?(account: ResolvedClawHouseAccount, cfg: unknown): boolean;
+  describeAccount?(account: ResolvedClawHouseAccount, cfg: unknown): ChannelAccountSnapshot;
+}
+
+export interface ChannelOutboundAdapter {
+  deliveryMode: 'direct' | 'gateway' | 'hybrid';
+  sendText?(ctx: ChannelOutboundContext): Promise<OutboundDeliveryResult>;
+  textChunkLimit?: number;
+  chunkerMode?: 'text' | 'markdown';
+}
+
+export interface ChannelGatewayAdapter {
+  startAccount?(ctx: ChannelGatewayContext): Promise<unknown>;
+  stopAccount?(ctx: ChannelGatewayContext): Promise<void>;
+}
+
+export interface ChannelGatewayContext {
+  cfg: unknown;
+  accountId: string;
+  account: ResolvedClawHouseAccount;
+  runtime: unknown;
+  abortSignal: AbortSignal;
+  log?: PluginLogger;
+  getStatus(): ChannelAccountSnapshot;
+  setStatus(next: ChannelAccountSnapshot): void;
+}
+
+export interface ChannelSetupAdapter {
+  applyAccountConfig(params: {
+    cfg: unknown;
+    accountId: string;
+    input: Record<string, string>;
+  }): unknown;
+  validateInput?(params: {
+    cfg: unknown;
+    accountId: string;
+    input: Record<string, string>;
+  }): string | null;
+}
+
+export interface ChannelSecurityAdapter {
+  resolveDmPolicy?(): { policy: string };
+}
+
+export interface ChannelOutboundContext {
+  cfg: unknown;
+  to: string;
+  text: string;
+  threadId?: string | number | null;
+  replyToId?: string | null;
+  accountId?: string | null;
+}
+
+export interface OutboundDeliveryResult {
+  channel: string;
+  success: boolean;
+  threadId?: string;
+}
+
+export interface ChannelAccountSnapshot {
+  running?: boolean;
+  lastStartAt?: number;
+  lastStopAt?: number;
+  lastError?: string;
+}
+
+// ClawHouse-specific types
+
+export interface ResolvedClawHouseAccount {
+  accountId: string;
+  botToken: string;
+  apiUrl: string;
+  wsUrl: string;
+  enabled: boolean;
+}
+
+export interface ClawHouseChannelConfig {
+  enabled?: boolean;
+  botToken: string;
+  apiUrl: string;
+  wsUrl: string;
+  accounts?: Record<string, Omit<ClawHouseChannelConfig, 'accounts'>>;
+}
+
+// Chat message returned by the messages API
+export interface ChatMessage {
+  messageId: string;
+  botId: string;
+  userId: string;
+  authorType: 'bot' | 'user';
+  content: string;
+  taskId?: string | null;
+  createdAt: string;
+  userName?: string | null;
+  botName?: string | null;
+}
+
+export interface MessagesResponse {
+  items: ChatMessage[];
+  cursor: string | null;
+  hasMore: boolean;
+}
+
+export interface WsTicketResponse {
+  ticket: string;
+  wsUrl: string;
+  expiresAt: string;
+}
+
+// WebSocket notification payload (thin — just a poke)
+export interface WsNotification {
+  action: 'notify';
+  hint: string;
+}

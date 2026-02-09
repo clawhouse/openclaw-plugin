@@ -1,0 +1,8 @@
+{
+  "id": "clawhouse",
+  "name": "ClawHouse",
+  "description": "Channel plugin and agent tools for ClawHouse project management",
+  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+  "channels": ["clawhouse"],
+  "skills": ["./skills"]
+}

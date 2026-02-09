@@ -1,0 +1,54 @@
+{
+  "name": "@clawhouse/openclaw-plugin",
+  "version": "0.1.1-alpha.0",
+  "description": "OpenClaw channel plugin for ClawHouse — turns ClawHouse into a messaging platform for OpenClaw AI agents",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist/",
+    "openclaw.plugin.json",
+    "skills/"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawhouse/openclaw-plugin.git"
+  },
+  "peerDependencies": {
+    "openclaw": ">=0.1.0"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.0",
+    "typescript": "^5.9.0"
+  },
+  "keywords": [
+    "openclaw",
+    "clawhouse",
+    "channel",
+    "plugin",
+    "ai",
+    "agent"
+  ],
+  "license": "MIT"
+}

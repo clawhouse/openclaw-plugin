@@ -1,0 +1,120 @@
+import type { MessagesResponse, WsTicketResponse } from './types';
+
+/**
+ * HTTP client for the ClawHouse bot API.
+ * All endpoints use tRPC via HTTP POST/GET.
+ */
+export class ClawHouseClient {
+  private botToken: string;
+  private apiUrl: string;
+
+  constructor(botToken: string, apiUrl: string) {
+    this.botToken = botToken;
+    this.apiUrl = apiUrl.replace(/\/$/, '');
+  }
+
+  private async request<T>(
+    method: 'GET' | 'POST',
+    procedure: string,
+    input?: unknown,
+  ): Promise<T> {
+    const url =
+      method === 'GET' && input
+        ? `${this.apiUrl}/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`
+        : `${this.apiUrl}/${procedure}`;
+
+    const response = await fetch(url, {
+      method,
+      headers: {
+        Authorization: `Bot ${this.botToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: method === 'POST' ? JSON.stringify(input) : undefined,
+    });
+
+    if (!response.ok) {
+      const text = await response.text().catch(() => 'unknown error');
+      throw new Error(
+        `ClawHouse API error: ${response.status} ${response.statusText} — ${text}`,
+      );
+    }
+
+    const json = (await response.json()) as { result?: { data: T } };
+    return json.result?.data as T;
+  }
+
+  // Messages
+  async sendMessage(input: {
+    userId: string;
+    content: string;
+    taskId?: string;
+  }): Promise<unknown> {
+    return this.request('POST', 'messages.send', input);
+  }
+
+  async listMessages(input: {
+    userId?: string;
+    cursor?: string | null;
+    limit?: number;
+  }): Promise<MessagesResponse> {
+    return this.request<MessagesResponse>('GET', 'messages.list', input);
+  }
+
+  // WebSocket ticket
+  async getWsTicket(): Promise<WsTicketResponse> {
+    return this.request<WsTicketResponse>('POST', 'messages.wsTicket', {});
+  }
+
+  // Tasks
+  async comment(input: { taskId: string; content: string }): Promise<unknown> {
+    return this.request('POST', 'tasks.comment', input);
+  }
+
+  async createTask(input: {
+    projectId: string;
+    title: string;
+    instructions?: string;
+  }): Promise<unknown> {
+    return this.request('POST', 'tasks.create', input);
+  }
+
+  async listTasks(input: {
+    projectId: string;
+    status?: string;
+  }): Promise<unknown[]> {
+    return this.request('GET', 'tasks.list', input);
+  }
+
+  async done(input: {
+    taskId: string;
+    reason: string;
+    deliverable?: string;
+  }): Promise<unknown> {
+    return this.request('POST', 'tasks.done', input);
+  }
+
+  async giveup(input: {
+    taskId: string;
+    reason: string;
+    deliverable?: string;
+  }): Promise<unknown> {
+    return this.request('POST', 'tasks.giveup', input);
+  }
+
+  async getNextTask(input?: { projectId?: string }): Promise<unknown> {
+    return this.request('GET', 'tasks.getNextTask', input ?? {});
+  }
+
+  async listProjects(): Promise<unknown[]> {
+    return this.request('GET', 'projects.list', {});
+  }
+
+  async createProject(input: {
+    name: string;
+    key: string;
+    description?: string;
+    color?: string;
+  }): Promise<unknown> {
+    return this.request('POST', 'projects.create', input);
+  }
+}
