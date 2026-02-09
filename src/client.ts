@@ -1,4 +1,4 @@
-import type { MessagesResponse, WsTicketResponse } from './types';
+import type { ChannelProbeResult, MessagesResponse, WsTicketResponse } from './types';
 
 /**
  * HTTP client for the ClawHouse bot API.
@@ -116,5 +116,34 @@ export class ClawHouseClient {
     color?: string;
   }): Promise<unknown> {
     return this.request('POST', 'projects.create', input);
+  }
+
+  // Probe — lightweight health check via projects.list
+  async probe(timeoutMs: number): Promise<ChannelProbeResult> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+
+    try {
+      const response = await fetch(
+        `${this.apiUrl}/projects.list?input=${encodeURIComponent(JSON.stringify({}))}`,
+        {
+          method: 'GET',
+          headers: {
+            Authorization: `Bot ${this.botToken}`,
+            'Content-Type': 'application/json',
+          },
+          signal: controller.signal,
+        },
+      );
+      if (!response.ok) {
+        return { ok: false, error: `HTTP ${response.status}` };
+      }
+      return { ok: true };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { ok: false, error: message };
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }

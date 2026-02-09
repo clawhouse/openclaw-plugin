@@ -55,6 +55,7 @@ export interface OpenClawPluginApi {
 export interface PluginRuntime {
   config: {
     loadConfig(): unknown;
+    writeConfigFile(cfg: unknown): Promise<void>;
   };
   channel: {
     reply: {
@@ -116,6 +117,8 @@ export interface ChannelPlugin {
   gateway?: ChannelGatewayAdapter;
   setup?: ChannelSetupAdapter;
   security?: ChannelSecurityAdapter;
+  onboarding?: ChannelOnboardingAdapter;
+  status?: ChannelStatusAdapter;
 }
 
 export interface ChannelMeta {
@@ -150,6 +153,7 @@ export interface ChannelOutboundAdapter {
 export interface ChannelGatewayAdapter {
   startAccount?(ctx: ChannelGatewayContext): Promise<unknown>;
   stopAccount?(ctx: ChannelGatewayContext): Promise<void>;
+  logoutAccount?(ctx: ChannelLogoutContext): Promise<ChannelLogoutResult>;
 }
 
 export interface ChannelGatewayContext {
@@ -196,10 +200,14 @@ export interface OutboundDeliveryResult {
 }
 
 export interface ChannelAccountSnapshot {
+  accountId?: string;
+  enabled?: boolean;
+  configured?: boolean;
   running?: boolean;
   lastStartAt?: number;
   lastStopAt?: number;
   lastError?: string;
+  probe?: ChannelProbeResult;
 }
 
 // ClawHouse-specific types
@@ -243,6 +251,90 @@ export interface WsTicketResponse {
   ticket: string;
   wsUrl: string;
   expiresAt: string;
+}
+
+// Wizard prompter for onboarding flows
+export interface WizardPrompter {
+  text(params: {
+    message: string;
+    initialValue?: string;
+    placeholder?: string;
+    validate?: (value: string) => string | undefined;
+  }): Promise<string>;
+  confirm(params: { message: string; initialValue?: boolean }): Promise<boolean>;
+  note(message: string, title?: string): Promise<void>;
+}
+
+// Onboarding adapter types
+export interface ChannelOnboardingStatus {
+  channel: string;
+  configured: boolean;
+  statusLines: string[];
+  selectionHint?: string;
+  quickstartScore?: number;
+}
+
+export interface ChannelOnboardingResult {
+  cfg: unknown;
+  accountId?: string;
+}
+
+export interface ChannelOnboardingAdapter {
+  channel: string;
+  getStatus(ctx: { cfg: unknown }): Promise<ChannelOnboardingStatus>;
+  configure(ctx: {
+    cfg: unknown;
+    runtime: unknown;
+    prompter: WizardPrompter;
+    accountOverrides: Record<string, string>;
+    shouldPromptAccountIds: boolean;
+    forceAllowFrom: boolean;
+  }): Promise<ChannelOnboardingResult>;
+  disable?(cfg: unknown): unknown;
+}
+
+// Status adapter types
+export interface ChannelProbeResult {
+  ok: boolean;
+  error?: string;
+}
+
+export interface ChannelStatusIssue {
+  channel: string;
+  accountId: string;
+  kind: 'config' | 'auth' | 'runtime';
+  message: string;
+  fix?: string;
+}
+
+export interface ChannelStatusAdapter {
+  probeAccount?(params: {
+    account: ResolvedClawHouseAccount;
+    timeoutMs: number;
+    cfg: unknown;
+  }): Promise<ChannelProbeResult>;
+  buildAccountSnapshot?(params: {
+    account: ResolvedClawHouseAccount;
+    cfg: unknown;
+    runtime?: ChannelAccountSnapshot;
+    probe?: ChannelProbeResult;
+  }): ChannelAccountSnapshot;
+  collectStatusIssues?(accounts: ChannelAccountSnapshot[]): ChannelStatusIssue[];
+}
+
+// Logout types
+export interface ChannelLogoutContext {
+  cfg: unknown;
+  accountId: string;
+  account: ResolvedClawHouseAccount;
+  runtime: unknown;
+  log?: PluginLogger;
+}
+
+export interface ChannelLogoutResult {
+  cleared: boolean;
+  loggedOut?: boolean;
+  [key: string]: unknown;
 }
 
 // WebSocket notification payload (thin — just a poke)
