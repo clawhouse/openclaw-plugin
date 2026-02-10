@@ -296,7 +296,7 @@ async function pollAndDeliver(
     log.info(`Received ${response.items.length} new message(s).`);
 
     for (const message of response.items) {
-      await deliverMessageToAgent(ctx, message);
+      await deliverMessageToAgent(ctx, message, client);
     }
 
     // Persist cursor

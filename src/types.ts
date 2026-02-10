@@ -68,8 +68,18 @@ export interface PluginRuntime {
         ctx: FinalizedMsgContext;
         cfg: unknown;
         dispatcher: ReplyDispatcher;
+        replyOptions?: unknown;
       }): Promise<{ queuedFinal: boolean }>;
-      createReplyDispatcherWithTyping(params: unknown): ReplyDispatcher;
+      createReplyDispatcherWithTyping(params: {
+        channel: string;
+        accountId: string;
+        deliver: (payload: { text?: string; body?: string }) => Promise<void>;
+        [key: string]: unknown;
+      }): {
+        dispatcher: ReplyDispatcher;
+        replyOptions: unknown;
+        markDispatchIdle: () => void;
+      };
     };
     text: {
       chunkMarkdownText(text: string, limit: number): string[];
