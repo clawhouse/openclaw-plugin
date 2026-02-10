@@ -69,6 +69,17 @@ function textResult(data: unknown): {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
+function errorResult(err: unknown): {
+  content: Array<{ type: string; text: string }>;
+  isError: true;
+} {
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    content: [{ type: 'text', text: JSON.stringify({ error: true, message }) }],
+    isError: true,
+  };
+}
+
 /**
  * Creates all ClawHouse agent tools.
  * Returns null if the channel is not configured.
@@ -85,82 +96,114 @@ export function createClawHouseTools(
     {
       ...TOOLS.GET_NEXT_TASK,
       async execute(_id, params) {
-        const result = await client.getNextTask({
-          projectId: params.projectId as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.getNextTask({
+            projectId: params.projectId as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.LIST_TASKS,
       async execute(_id, params) {
-        const result = await client.listTasks({
-          projectId: params.projectId as string,
-          status: params.status as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.listTasks({
+            projectId: params.projectId as string,
+            status: params.status as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.COMMENT,
       async execute(_id, params) {
-        const result = await client.comment({
-          taskId: params.taskId as string,
-          content: params.content as string,
-        });
-        return textResult(result);
+        try {
+          const result = await client.comment({
+            taskId: params.taskId as string,
+            content: params.content as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.DONE,
       async execute(_id, params) {
-        const result = await client.done({
-          taskId: params.taskId as string,
-          reason: params.reason as string,
-          deliverable: params.deliverable as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.done({
+            taskId: params.taskId as string,
+            reason: params.reason as string,
+            deliverable: params.deliverable as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.GIVEUP,
       async execute(_id, params) {
-        const result = await client.giveup({
-          taskId: params.taskId as string,
-          reason: params.reason as string,
-          deliverable: params.deliverable as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.giveup({
+            taskId: params.taskId as string,
+            reason: params.reason as string,
+            deliverable: params.deliverable as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.LIST_PROJECTS,
       async execute() {
-        const result = await client.listProjects();
-        return textResult(result);
+        try {
+          const result = await client.listProjects();
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.CREATE_TASK,
       async execute(_id, params) {
-        const result = await client.createTask({
-          projectId: params.projectId as string,
-          title: params.title as string,
-          instructions: params.instructions as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.createTask({
+            projectId: params.projectId as string,
+            title: params.title as string,
+            instructions: params.instructions as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
     {
       ...TOOLS.CREATE_PROJECT,
       async execute(_id, params) {
-        const result = await client.createProject({
-          name: params.name as string,
-          key: params.key as string,
-          description: params.description as string | undefined,
-          color: params.color as string | undefined,
-        });
-        return textResult(result);
+        try {
+          const result = await client.createProject({
+            name: params.name as string,
+            key: params.key as string,
+            description: params.description as string | undefined,
+            color: params.color as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
       },
     },
   ];

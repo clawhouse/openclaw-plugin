@@ -55,12 +55,10 @@ export const TOOLS = {
     parameters: Type.Object({
       taskId: Type.String({ description: 'Task UUID' }),
       reason: Type.String({ description: 'Why the task is complete' }),
-      deliverable: Type.Optional(
-        Type.String({
-          description:
-            'Markdown deliverable documenting what was done and results',
-        }),
-      ),
+      deliverable: Type.String({
+        description:
+          'Markdown deliverable documenting what was done and results',
+      }),
     }),
   },
   GIVEUP: {
@@ -72,12 +70,10 @@ export const TOOLS = {
       reason: Type.String({
         description: 'Why the task cannot be completed',
       }),
-      deliverable: Type.Optional(
-        Type.String({
-          description:
-            'Markdown deliverable documenting partial progress and blockers',
-        }),
-      ),
+      deliverable: Type.String({
+        description:
+          'Markdown deliverable documenting partial progress and blockers',
+      }),
     }),
   },
   LIST_PROJECTS: {
