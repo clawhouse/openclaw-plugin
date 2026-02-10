@@ -1,6 +1,45 @@
 import { ClawHouseClient } from './client';
 import { getClawHouseRuntime } from './runtime';
-import type { ChannelGatewayContext, ChatMessage, PluginLogger } from './types';
+import type {
+  ChannelGatewayContext,
+  ChatMessage,
+  ChatMessageAttachment,
+  PluginLogger,
+  PluginRuntime,
+} from './types';
+import { randomUUID } from 'node:crypto';
+import { createWriteStream } from 'node:fs';
+import { mkdir } from 'node:fs/promises';
+import { dirname, extname } from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+
+/**
+ * Downloads a file from a signed S3 URL and saves it to the plugin store.
+ */
+async function fetchAndSaveMedia(
+  runtime: PluginRuntime,
+  attachment: ChatMessageAttachment,
+): Promise<{ path: string; contentType: string }> {
+  const ext = extname(attachment.name) || '.bin';
+  const fileName = `${randomUUID()}${ext}`;
+  const filePath = runtime.state.resolveStorePath(`media/inbound/${fileName}`);
+
+  // Ensure directory exists
+  await mkdir(dirname(filePath), { recursive: true });
+
+  const response = await fetch(attachment.url);
+  if (!response.ok || !response.body) {
+    throw new Error(`Failed to download attachment: ${response.status}`);
+  }
+
+  // Stream the response body to disk
+  const nodeStream = Readable.fromWeb(response.body as never);
+  const fileStream = createWriteStream(filePath);
+  await pipeline(nodeStream, fileStream);
+
+  return { path: filePath, contentType: attachment.contentType };
+}
 
 /**
  * Delivers a ClawHouse chat message to the OpenClaw agent pipeline.
@@ -25,6 +64,20 @@ export async function deliverMessageToAgent(
       `: "${message.content.slice(0, 80)}${message.content.length > 80 ? '…' : ''}"`,
   );
 
+  // Download attachment if present
+  let mediaPath: string | undefined;
+  let mediaType: string | undefined;
+
+  if (message.attachment?.url) {
+    try {
+      const saved = await fetchAndSaveMedia(runtime, message.attachment);
+      mediaPath = saved.path;
+      mediaType = saved.contentType;
+    } catch {
+      // Non-fatal — deliver message without media
+    }
+  }
+
   const msgCtx = runtime.channel.reply.finalizeInboundContext({
     Body: message.content,
     RawBody: message.content,
@@ -40,6 +93,9 @@ export async function deliverMessageToAgent(
     AccountId: ctx.accountId,
     FromName: message.userName ?? 'Unknown',
     SessionKey: `agent:main:clawhouse:dm:${peerId}`,
+    MediaPath: mediaPath,
+    MediaType: mediaType,
+    MediaUrl: mediaPath,
   });
 
   try {

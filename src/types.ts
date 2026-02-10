@@ -282,12 +282,20 @@ export interface ClawHouseChannelConfig {
 }
 
 // Chat message returned by the messages API
+export interface ChatMessageAttachment {
+  name: string;
+  contentType: string;
+  size: number;
+  url: string; // signed S3 download URL
+}
+
 export interface ChatMessage {
   messageId: string;
   botId: string;
   userId: string;
   authorType: 'bot' | 'user';
   content: string;
+  attachment?: ChatMessageAttachment | null;
   taskId?: string | null;
   createdAt: string;
   userName?: string | null;
