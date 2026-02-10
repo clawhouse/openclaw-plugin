@@ -270,12 +270,23 @@ async function pollAndDeliver(
     });
 
     // On first run, don't deliver old messages — just seed the cursor
+    // and send a welcome message so the user knows the connection is live.
     if (isFirstRun) {
       if (response.cursor) {
         log.info(
           `First run: skipping ${response.items.length} existing message(s), seeding cursor.`,
         );
         saveCursor(ctx, response.cursor);
+
+        try {
+          await client.sendMessage({
+            content: '🟢 Connected to ClawHouse. Ready to receive messages and tasks.',
+          });
+          log.info('Sent welcome message.');
+        } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          log.warn(`Failed to send welcome message: ${errMsg}`);
+        }
       }
       return response.cursor;
     }
