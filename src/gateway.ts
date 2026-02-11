@@ -269,10 +269,14 @@ async function pollAndDeliver(
   log: PluginLogger,
 ): Promise<string | null> {
   try {
-    const isFirstRun = !cursor;
+    // SEED is a sentinel value indicating we've completed the first-run
+    // flow but had no real cursor (empty inbox). Don't send it to the API
+    // since it's not a valid datetime cursor.
+    const isFirstRun = !cursor || cursor === 'SEED';
+    const apiCursor = cursor && cursor !== 'SEED' ? cursor : undefined;
 
     const response = await client.listMessages({
-      ...(cursor ? { cursor } : {}),
+      ...(apiCursor ? { cursor: apiCursor } : {}),
     });
 
     // On first run, don't deliver old messages — just seed the cursor
