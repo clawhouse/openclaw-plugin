@@ -64,17 +64,20 @@ export async function deliverMessageToAgent(
       `: "${message.content.slice(0, 80)}${message.content.length > 80 ? '…' : ''}"`,
   );
 
-  // Download attachment if present
-  let mediaPath: string | undefined;
-  let mediaType: string | undefined;
+  // Download attachments if present
+  const mediaPaths: string[] = [];
+  const mediaTypes: string[] = [];
+  const mediaUrls: string[] = [];
 
-  if (message.attachment?.url) {
+  for (const attachment of message.attachments ?? []) {
+    if (!attachment.url) continue;
     try {
-      const saved = await fetchAndSaveMedia(runtime, message.attachment);
-      mediaPath = saved.path;
-      mediaType = saved.contentType;
+      const saved = await fetchAndSaveMedia(runtime, attachment);
+      mediaPaths.push(saved.path);
+      mediaTypes.push(saved.contentType);
+      mediaUrls.push(saved.path);
     } catch {
-      // Non-fatal — deliver message without media
+      // Non-fatal — skip this attachment
     }
   }
 
@@ -93,9 +96,15 @@ export async function deliverMessageToAgent(
     AccountId: ctx.accountId,
     FromName: message.userName ?? 'Unknown',
     SessionKey: `agent:main:clawhouse:dm:${peerId}`,
-    MediaPath: mediaPath,
-    MediaType: mediaType,
-    MediaUrl: mediaPath,
+    // Backward-compatible: first attachment
+    MediaPath: mediaPaths[0],
+    MediaType: mediaTypes[0],
+    MediaUrl: mediaUrls[0],
+    // Array keys for multiple attachments
+    MediaPaths: mediaPaths,
+    MediaTypes: mediaTypes,
+    MediaUrls: mediaUrls,
+    MediaCount: mediaPaths.length,
   });
 
   try {

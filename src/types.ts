@@ -295,7 +295,7 @@ export interface ChatMessage {
   userId: string;
   authorType: 'bot' | 'user';
   content: string;
-  attachment?: ChatMessageAttachment | null;
+  attachments?: ChatMessageAttachment[];
   taskId?: string | null;
   createdAt: string;
   userName?: string | null;

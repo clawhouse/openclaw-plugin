@@ -52,6 +52,12 @@ export class ClawHouseClient {
     userId?: string;
     content: string;
     taskId?: string;
+    attachments?: Array<{
+      s3Key: string;
+      name: string;
+      contentType: string;
+      size: number;
+    }>;
   }): Promise<unknown> {
     return this.request('POST', 'messages.send', input);
   }
