@@ -2,6 +2,12 @@ import type {
   ChannelProbeResult,
   MessagesResponse,
   WsTicketResponse,
+  Task,
+  Project,
+  TasksListResponse,
+  ProjectsListResponse,
+  CreateTaskResponse,
+  CreateProjectResponse,
 } from './types';
 
 /**
@@ -58,7 +64,7 @@ export class ClawHouseClient {
       contentType: string;
       size: number;
     }>;
-  }): Promise<unknown> {
+  }): Promise<void> {
     return this.request('POST', 'messages.send', input);
   }
 
@@ -76,7 +82,7 @@ export class ClawHouseClient {
   }
 
   // Tasks
-  async comment(input: { taskId: string; content: string }): Promise<unknown> {
+  async comment(input: { taskId: string; content: string }): Promise<void> {
     return this.request('POST', 'tasks.comment', input);
   }
 
@@ -84,14 +90,14 @@ export class ClawHouseClient {
     projectId: string;
     title: string;
     instructions?: string;
-  }): Promise<unknown> {
+  }): Promise<CreateTaskResponse> {
     return this.request('POST', 'tasks.create', input);
   }
 
   async listTasks(input: {
     projectId: string;
     status?: string;
-  }): Promise<unknown[]> {
+  }): Promise<TasksListResponse> {
     return this.request('GET', 'tasks.list', input);
   }
 
@@ -99,7 +105,7 @@ export class ClawHouseClient {
     taskId: string;
     reason: string;
     deliverable?: string;
-  }): Promise<unknown> {
+  }): Promise<void> {
     return this.request('POST', 'tasks.done', input);
   }
 
@@ -107,15 +113,15 @@ export class ClawHouseClient {
     taskId: string;
     reason: string;
     deliverable?: string;
-  }): Promise<unknown> {
+  }): Promise<void> {
     return this.request('POST', 'tasks.giveup', input);
   }
 
-  async getNextTask(input?: { projectId?: string }): Promise<unknown> {
+  async getNextTask(input?: { projectId?: string }): Promise<Task | null> {
     return this.request('POST', 'tasks.getNextTask', input ?? {});
   }
 
-  async listProjects(): Promise<unknown[]> {
+  async listProjects(): Promise<ProjectsListResponse> {
     return this.request('GET', 'projects.list', {});
   }
 
@@ -124,7 +130,7 @@ export class ClawHouseClient {
     key: string;
     description?: string;
     color?: string;
-  }): Promise<unknown> {
+  }): Promise<CreateProjectResponse> {
     return this.request('POST', 'projects.create', input);
   }
 

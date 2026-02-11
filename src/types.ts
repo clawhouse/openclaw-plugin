@@ -408,3 +408,67 @@ export interface WsNotification {
   action: 'notify';
   hint: string;
 }
+
+// ClawHouse API response types
+export interface Task {
+  taskId: string;
+  title: string;
+  status: 'ready_for_bot' | 'working_on_it' | 'waiting_for_human' | 'done';
+  instructions?: string;
+  projectId: string;
+  createdAt: string;
+  updatedAt: string;
+  botId?: string | null;
+  userId: string;
+  reason?: string | null;
+  deliverable?: string | null;
+}
+
+export interface Project {
+  projectId: string;
+  name: string;
+  key: string;
+  description?: string | null;
+  color?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  userId: string;
+}
+
+export interface Bot {
+  userId: string;
+  name: string;
+  description?: string | null;
+  isBot: boolean;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+  createdById: string;
+}
+
+export interface TasksListResponse {
+  tasks: Task[];
+}
+
+export interface ProjectsListResponse {
+  projects: Project[];
+}
+
+export interface CreateTaskResponse {
+  task: Task;
+}
+
+export interface CreateProjectResponse {
+  project: Project;
+}
+
+export interface GetBotTokenResponse {
+  token: string;
+  userId: string;
+}
+
+export interface CreateBotResponse {
+  bot: Bot;
+  token: string;
+  userId: string;
+}
