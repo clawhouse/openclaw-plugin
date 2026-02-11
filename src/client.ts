@@ -112,7 +112,7 @@ export class ClawHouseClient {
   }
 
   async getNextTask(input?: { projectId?: string }): Promise<unknown> {
-    return this.request('GET', 'tasks.getNextTask', input ?? {});
+    return this.request('POST', 'tasks.getNextTask', input ?? {});
   }
 
   async listProjects(): Promise<unknown[]> {
