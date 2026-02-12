@@ -106,9 +106,12 @@ async function fetchAndSaveMedia(
   }
 
   // Generate safe file path
-  const ext = extname(attachment.name) || '.bin';
   const sanitizedName = sanitizeFileName(attachment.name);
-  const fileName = `${randomUUID()}_${sanitizedName}${ext}`;
+  // Only append extension if the sanitized name doesn't already have one
+  const hasExt = extname(sanitizedName).length > 0;
+  const fileName = hasExt
+    ? `${randomUUID()}_${sanitizedName}`
+    : `${randomUUID()}_${sanitizedName}${extname(attachment.name) || '.bin'}`;
   const filePath = resolvePluginStorePath(`media/inbound/${fileName}`);
 
   // Ensure directory exists

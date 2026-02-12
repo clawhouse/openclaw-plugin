@@ -319,16 +319,7 @@ async function pollAndDeliver(
         log.info('First run: no messages yet (empty inbox).');
       }
 
-      try {
-        await client.sendMessage({
-          content:
-            '🟢 Connected to ClawHouse. Ready to receive messages and tasks.',
-        });
-        log.info('Sent welcome message.');
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-        log.warn(`Failed to send welcome message: ${errMsg}`);
-      }
+      log.info('Connected to ClawHouse. Ready to receive messages and tasks.');
 
       // Return the API cursor, or empty string as sentinel when API returns
       // null (empty inbox) so subsequent polls don't re-trigger first-run flow.
@@ -344,6 +335,11 @@ async function pollAndDeliver(
     // Fix CP-05: save cursor after each successful delivery so a mid-batch
     // failure doesn't cause the entire batch to be re-delivered on retry.
     for (const message of response.items) {
+      // Skip bot's own messages to prevent echo loops
+      if (message.authorType === 'bot') {
+        log.debug(`Skipping bot message ${message.messageId}`);
+        continue;
+      }
       await deliverMessageToAgent(ctx, message, client);
     }
 
