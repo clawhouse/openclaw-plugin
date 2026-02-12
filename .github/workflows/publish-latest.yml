@@ -1,0 +1,40 @@
+name: Publish Latest
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build
+
+      - name: Verify stable version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [[ "$VERSION" == *-* ]]; then
+            echo "::error::Package version ($VERSION) is a prerelease — bump to a stable version before publishing @latest"
+            exit 1
+          fi
+
+      - name: Create GitHub release
+        run: |
+          TAG="v$(node -p "require('./package.json').version")"
+          gh release create "$TAG" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Publish to npm
+        run: npm publish --provenance --tag latest
