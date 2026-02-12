@@ -39,6 +39,19 @@ jobs:
           node-version: 24
           registry-url: 'https://registry.npmjs.org'
 
+      - name: Generate custom dependency hash
+        run: |
+          # Strips the first 10 lines to remove the root 'version' field before hashing
+          tail -n +10 package-lock.json | shasum -a 256 | cut -d' ' -f1 > lockfile.hash
+        shell: bash
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('lockfile.hash') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - run: npm ci
       - run: npm run build
 
