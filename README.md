@@ -49,7 +49,7 @@ This installs the plugin to `~/.openclaw/extensions/clawhouse-openclaw/` and ena
 
 ```bash
 openclaw plugins list
-openclaw plugins info clawhouse-openclaw
+openclaw plugins info clawhouse
 ```
 
 ## Configuration

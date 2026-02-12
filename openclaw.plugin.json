@@ -1,8 +1,8 @@
 {
-  "id": "clawhouse-openclaw",
+  "id": "clawhouse",
   "name": "ClawHouse",
   "description": "Channel plugin and agent tools for ClawHouse project management",
-  "configSchema": { "type": "object", "additionalProperties": false, "properties": {} },
+  "configSchema": { "type": "object", "additionalProperties": true },
   "channels": ["clawhouse"],
   "skills": ["./skills"]
 }
