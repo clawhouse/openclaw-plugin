@@ -30,6 +30,7 @@ jobs:
         with:
           node-version: 24
           cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
       - name: Generate custom dependency hash
         run: |
           # Strips the first 10 lines to remove the root 'version' field before hashing
