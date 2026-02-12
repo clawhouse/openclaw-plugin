@@ -8,13 +8,22 @@ import type {
  * HTTP client for the ClawHouse bot API.
  * All endpoints use tRPC via HTTP POST/GET.
  */
+/** Default timeout for API requests (30 seconds). */
+const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+
 export class ClawHouseClient {
   private botToken: string;
   private apiUrl: string;
+  private requestTimeoutMs: number;
 
-  constructor(botToken: string, apiUrl: string) {
+  constructor(
+    botToken: string,
+    apiUrl: string,
+    options?: { requestTimeoutMs?: number },
+  ) {
     this.botToken = botToken;
     this.apiUrl = apiUrl.replace(/\/$/, '');
+    this.requestTimeoutMs = options?.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
   }
 
   private async request<T>(
@@ -27,14 +36,30 @@ export class ClawHouseClient {
         ? `${this.apiUrl}/${procedure}?input=${encodeURIComponent(JSON.stringify(input))}`
         : `${this.apiUrl}/${procedure}`;
 
-    const response = await fetch(url, {
-      method,
-      headers: {
-        Authorization: `Bot ${this.botToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: method === 'POST' ? JSON.stringify(input) : undefined,
-    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Bot ${this.botToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: method === 'POST' ? JSON.stringify(input) : undefined,
+        signal: controller.signal,
+      });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        throw new Error(
+          `ClawHouse API timeout: ${procedure} did not respond within ${this.requestTimeoutMs}ms`,
+        );
+      }
+      throw err;
+    }
+    clearTimeout(timer);
 
     if (!response.ok) {
       const text = await response.text().catch(() => 'unknown error');
