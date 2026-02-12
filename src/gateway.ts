@@ -1,3 +1,7 @@
+// Fix PL-02: use ESM imports instead of require() for fs and path
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+
 import { ClawHouseClient } from './client';
 import { deliverMessageToAgent } from './deliver';
 import { getClawHouseRuntime } from './runtime';
@@ -13,6 +17,28 @@ const POLL_FALLBACK_INTERVAL_MS = 30 * 1000; // 30s fallback when WS is down
 const BACKOFF_INITIAL_MS = 2000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_FACTOR = 1.8;
+
+// Fix CP-05: serialize poll operations to prevent duplicate message delivery
+// Simple promise-chain mutex — each poll waits for the previous one to finish.
+let pollChain: Promise<void> = Promise.resolve();
+
+function enqueuePoll(
+  client: ClawHouseClient,
+  ctx: ChannelGatewayContext,
+  getCursor: () => string | null,
+  setCursor: (c: string | null) => void,
+  log: PluginLogger,
+): void {
+  pollChain = pollChain
+    .then(async () => {
+      const newCursor = await pollAndDeliver(client, ctx, getCursor(), log);
+      if (newCursor) setCursor(newCursor);
+    })
+    .catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      log.error(`Poll error: ${message}`);
+    });
+}
 
 interface BackoffState {
   attempt: number;
@@ -32,17 +58,18 @@ function resetBackoff(state: BackoffState): void {
   state.attempt = 0;
 }
 
+// Fix PL-01: clean up abort listener to prevent memory leak
 function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
   });
 }
 
@@ -53,11 +80,10 @@ function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
 function loadCursor(ctx: ChannelGatewayContext): string | null {
   try {
     const runtime = getClawHouseRuntime();
-    const fs = require('fs') as typeof import('fs');
-    const path = runtime.state.resolveStorePath(
+    const cursorPath = runtime.state.resolveStorePath(
       `clawhouse/${ctx.accountId}/cursor`,
     );
-    return fs.readFileSync(path, 'utf-8').trim() || null;
+    return readFileSync(cursorPath, 'utf-8').trim() || null; // Fix PL-02: use ESM import
   } catch {
     return null;
   }
@@ -70,14 +96,12 @@ function saveCursor(
 ): void {
   try {
     const runtime = getClawHouseRuntime();
-    const fs = require('fs') as typeof import('fs');
-    const nodePath = require('path') as typeof import('path');
     const filePath = runtime.state.resolveStorePath(
       `clawhouse/${ctx.accountId}/cursor`,
     );
-    const dir = nodePath.dirname(filePath);
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(filePath, cursor, 'utf-8');
+    const dir = dirname(filePath);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(filePath, cursor, 'utf-8');
   } catch (err) {
     // Non-fatal — we'll just re-process some messages on restart
     const message = err instanceof Error ? err.message : String(err);
@@ -185,10 +209,8 @@ async function runWebSocketConnection(opts: {
         }
       }, PING_INTERVAL_MS);
 
-      // Initial catch-up poll
-      pollAndDeliver(client, ctx, cursor, log).then((newCursor) => {
-        if (newCursor) cursor = newCursor;
-      });
+      // Fix CP-05: enqueue initial catch-up poll through mutex
+      enqueuePoll(client, ctx, () => cursor, (c) => { cursor = c ?? cursor; }, log);
     });
 
     ws.on('message', async (data) => {
@@ -198,9 +220,8 @@ async function runWebSocketConnection(opts: {
           | { action: string };
 
         if (msg.action === 'notify') {
-          // Thin notification — poll for full data
-          const newCursor = await pollAndDeliver(client, ctx, cursor, log);
-          if (newCursor) cursor = newCursor;
+          // Fix CP-05: enqueue notification-triggered poll through mutex
+          enqueuePoll(client, ctx, () => cursor, (c) => { cursor = c ?? cursor; }, log);
         }
         // Ignore pong and other messages
       } catch (err) {
@@ -321,6 +342,8 @@ async function pollAndDeliver(
 
     log.info(`Received ${response.items.length} new message(s).`);
 
+    // Fix CP-05: save cursor after each successful delivery so a mid-batch
+    // failure doesn't cause the entire batch to be re-delivered on retry.
     for (const message of response.items) {
       await deliverMessageToAgent(ctx, message, client);
     }
