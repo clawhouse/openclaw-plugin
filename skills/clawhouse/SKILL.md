@@ -1,264 +1,115 @@
 ---
 name: clawhouse
-description: Task Orchestration v2 workflow for ClawHouse task management and messaging.
+description: Workflow knowledge for ClawHouse task management and messaging.
 version: 2.0.0
 metadata: { 'openclaw': { 'emoji': '🏠' } }
 ---
 
-## Overview
+## Installation
 
-ClawHouse is a task management platform that connects humans and AI agents through structured workflows. Task Orchestration v2 introduces a new pattern where **main agent sessions orchestrate sub-agents** to work on tasks, providing better separation of concerns and responsiveness.
+After installing the ClawHouse plugin, run `clawhouse_setup` to configure your workspace. This adds the self-tasking directive to your AGENTS.md so you'll always create tasks before starting work.
 
-### The New Workflow
+## Messaging
 
-1. **Discovery:** Main session monitors for available `ready_for_bot` tasks
-2. **Claiming:** Main session claims a task (`clawhouse_claim_task`)
-3. **Orchestration:** Main session spawns a sub-agent with taskId + title
-4. **Execution:** Sub-agent fetches context, works, updates deliverable, sends progress
-5. **Review:** Sub-agent calls `clawhouse_request_review` when done/blocked → terminates
-6. **Human Review:** Human reviews in ClawHouse UI, replies or approves
-7. **Continuation:** If task returns to `ready_for_bot`, cycle repeats with new sub-agent
+You are connected to ClawHouse via a 1:1 messaging channel. When a human sends you a message, **just reply naturally** — the channel handles routing automatically. You do not need to use any tool to send or receive messages.
 
-**Key Benefits:**
-- Main session stays responsive to humans while work happens in background
-- Clean task context per sub-agent (no cross-contamination)
-- Better failure recovery (orphaned tasks can be released)
-- Explicit human handoff points
+- **Inbound:** Human messages appear as regular conversation messages
+- **Outbound:** Your replies are automatically delivered back to the human
+- **Threading:** Messages may be linked to a task (visible as thread context)
 
-## Main Session Role (Orchestrator)
+No special syntax, no user IDs, no targeting required. Just respond to the conversation.
 
-You are the **orchestrator** if you're in the main session receiving direct human messages.
+## Task Workflow
 
-### Monitoring Tasks
-
-Periodically check for available work:
+Tasks follow a strict state machine. Understand this before using any tool.
 
 ```
-clawhouse_list_tasks(status="ready_for_bot")
+ready_for_bot ──[claim]──> working_on_it ──[request_review]──> waiting_for_human ──[approve]──> done
+       ▲              │                              │
+       │        [release]                      [decline]
+       └──────────────┘                              │
+       └─────────────────────────────────────────────┘
 ```
 
-**Best practice:** Check every 30-60 minutes, or when explicitly asked by human.
+### Statuses
 
-### Claiming and Spawning
+| Status | Meaning |
+|---|---|
+| `ready_for_bot` | Available for a bot to claim |
+| `working_on_it` | A bot is actively working on this task |
+| `waiting_for_human` | Bot submitted for human review |
+| `done` | Human approved the deliverable |
 
-When you find a task to work on:
+### Tools
 
-1. **Claim it first:** `clawhouse_claim_task(taskId="...")`
-2. **Spawn sub-agent:** Pass taskId and title in the spawn command
-3. **Monitor health:** Check if sub-agent is still working
-4. **Handle failures:** Release orphaned tasks with `clawhouse_release_task`
+| Tool | Description |
+|---|---|
+| `clawhouse_create_task` | Create a new task (starts as `ready_for_bot`) |
+| `clawhouse_list_tasks` | List tasks, optionally filtered by status |
+| `clawhouse_get_task` | Fetch full task context by ID (instructions, deliverable, messages) |
+| `clawhouse_claim_task` | Claim a specific `ready_for_bot` task → `working_on_it` |
+| `clawhouse_release_task` | Release a task back to `ready_for_bot` (failure recovery) |
+| `clawhouse_update_deliverable` | Update the task's deliverable markdown incrementally |
+| `clawhouse_request_review` | Signal human to review → `waiting_for_human`. Bot should stop after this. |
+| `clawhouse_send_message` | Send a message in the task thread (progress updates, questions) |
+| `clawhouse_setup` | One-time setup: returns AGENTS.md directive block |
 
-**Example spawn command:**
-```
-spawn task-worker "Work on task: Analyze competitor pricing (task-123)"
-```
+### Self-Tasking
 
-**Pass context in the spawn message:**
-- Task ID
-- Task title
-- Any special instructions
+**When you start any non-trivial work, create a task first.** This applies whether a human asked you to do something or you're working proactively. The only exceptions are quick one-liners that take seconds.
 
-### Failure Recovery
+**Why:** Tasks give your human visibility into what you're doing, create a paper trail of deliverables, and let you collaborate through comments. Work without a task is invisible work.
 
-If a sub-agent crashes or becomes unresponsive:
-1. **Release the task:** `clawhouse_release_task(taskId="...")`
-2. **Task returns to ready_for_bot** and can be picked up again
-3. **Consider spawning a new sub-agent** if the work should continue
+**Flow:**
+1. **Create:** `clawhouse_create_task` with a clear title and instructions
+2. **Claim:** `clawhouse_claim_task` with the task ID to move it to `working_on_it`
+3. **Work:** Do the work. Use `clawhouse_update_deliverable` to build up deliverable incrementally. Use `clawhouse_send_message` for progress updates.
+4. **Review:** `clawhouse_request_review` when done. The human will approve or decline.
 
-### Tools for Main Session
+**Sub-agent pattern (recommended for longer tasks):**
+1. Main session creates + claims the task
+2. Spawn a sub-agent with the task ID
+3. Sub-agent calls `clawhouse_get_task` to load full context
+4. Sub-agent works, updates deliverable, then calls `clawhouse_request_review`
+5. One task per sub-agent to keep context clean
 
-- `clawhouse_list_tasks` — Monitor available work
-- `clawhouse_create_task` — Create new tasks from human requests
-- `clawhouse_claim_task` — Claim tasks before spawning sub-agents
-- `clawhouse_release_task` — Release orphaned tasks for failure recovery
-- `clawhouse_get_next_task` — Legacy auto-claim (backward compatibility)
+**Task titles:** Keep them short and scannable. Good: "Research competitor HumanLayer". Bad: "Do some research on a competitor called HumanLayer and write up findings".
 
-## Sub-Agent Role (Task Worker)
+## Decision Tree
 
-You are a **task worker** if you were spawned with a specific taskId to work on.
+When checking for work:
+1. Call `clawhouse_list_tasks` with `status: "ready_for_bot"` to see available tasks
+2. **Got tasks?** Pick one, `clawhouse_claim_task`, then work on it
+3. **Empty list?** No tasks available — stop checking
+4. **Can't complete?** Call `clawhouse_release_task` to put it back, or `clawhouse_request_review` with a comment explaining the blocker
 
-### Getting Started
+When given work by a human (chat, Slack, etc.):
+1. Create a task via `clawhouse_create_task`
+2. Claim it via `clawhouse_claim_task`
+3. Work on it, build deliverable, then `clawhouse_request_review`
 
-Your **first action** must be to fetch the full task context:
+## Human Review Outcomes
 
-```
-clawhouse_get_task(taskId="task-123")
-```
+- **Approve:** Task moves to `done`. Work is accepted.
+- **Decline:** Task moves back to `ready_for_bot` with the human's feedback. Bot can claim and retry with the feedback incorporated.
 
-This returns:
-- Complete instructions
-- Current deliverable
-- Task status
-- Message history
+## Rules
 
-### Working on the Task
-
-As you work, maintain communication and deliverables:
-
-1. **Progress updates:** `clawhouse_send_message(content="...", taskId="...")`
-2. **Build deliverable:** `clawhouse_update_deliverable(taskId="...", deliverable="...")`
-3. **Regular updates:** Keep humans informed of your progress
-
-**Deliverable best practices:**
-- Start with outline, fill in details incrementally
-- Use markdown format
-- Include links, code, screenshots as appropriate
-- Update frequently (not just at the end)
-
-### Finishing the Task
-
-When done OR blocked, signal for human review:
-
-```
-clawhouse_request_review(taskId="...", comment="Task completed. Ready for review.")
-```
-
-**Then terminate immediately.** The human will review your work and either:
-- Approve (task moves to `done`)
-- Request changes (task returns to `ready_for_bot` for new sub-agent)
-
-### Tools for Sub-Agents
-
-- `clawhouse_get_task` — Fetch full task context (first action)
-- `clawhouse_send_message` — Send progress updates in task thread
-- `clawhouse_update_deliverable` — Update task deliverable incrementally
-- `clawhouse_request_review` — Signal completion/blockage and terminate
-
-**NEVER call:** `clawhouse_done`, `clawhouse_giveup` (deprecated)
-
-## Task Lifecycle
-
-```
-┌─────────────────┐    clawhouse_create_task    ┌─────────────────┐
-│                 │──────────────────────────────>│                 │
-│   Human Idea    │                             │  ready_for_bot  │
-│                 │                             │                 │
-└─────────────────┘                             └─────────┬───────┘
-                                                          │
-                                                          │ clawhouse_claim_task
-                                                          │ (main session)
-                                                          ▼
-┌─────────────────┐    clawhouse_request_review   ┌─────────────────┐
-│                 │<──────────────────────────────│                 │
-│ waiting_for_human│                             │  working_on_it  │
-│                 │                             │   (sub-agent)   │
-└─────────┬───────┘                             └─────────────────┘
-          │
-          │ Human approves/rejects in UI
-          ▼
-┌─────────────────┐         or returns to ready_for_bot
-│      done       │         for another sub-agent attempt
-│                 │
-└─────────────────┘
-```
-
-**Status meanings:**
-- `ready_for_bot` — Available for any agent to claim
-- `working_on_it` — Actively being worked on by a sub-agent
-- `waiting_for_human` — Pending human review/approval
-- `done` — Completed and approved
-
-## Tool Reference
-
-### Main Session Tools
-
-| Tool | Purpose | Input | Output |
-|------|---------|--------|--------|
-| `clawhouse_list_tasks` | Monitor tasks | `status?` | List of tasks |
-| `clawhouse_create_task` | Create new task | `title`, `instructions?` | Created task |
-| `clawhouse_claim_task` | Claim ready task | `taskId` | Claimed task |
-| `clawhouse_release_task` | Release orphaned task | `taskId` | Released task |
-| `clawhouse_get_next_task` | Legacy auto-claim | | Task or null |
-| `clawhouse_setup` | Plugin setup | | AGENTS.md directive |
-
-### Sub-Agent Tools  
-
-| Tool | Purpose | Input | Output |
-|------|---------|--------|--------|
-| `clawhouse_get_task` | Get task context | `taskId` | Full task details |
-| `clawhouse_send_message` | Progress update | `content`, `taskId?` | Message sent |
-| `clawhouse_update_deliverable` | Update deliverable | `taskId`, `deliverable` | Updated |
-| `clawhouse_request_review` | Signal completion | `taskId`, `comment?` | Review requested |
-
-### Deprecated Tools
-
-| Tool | Status | Replacement |
-|------|--------|-------------|
-| `clawhouse_done` | Deprecated | `clawhouse_request_review` |
-| `clawhouse_giveup` | Deprecated | `clawhouse_request_review` |
-
-## Best Practices
-
-### For Main Sessions
-
-- **Check periodically** for ready_for_bot tasks (not constantly)
-- **Always claim before spawning** — never spawn without claiming first
-- **Monitor sub-agent health** — release orphaned tasks
-- **Pass clear context** in spawn messages (taskId + title minimum)
-- **Create tasks from human requests** before starting significant work
-
-### For Sub-Agents
-
-- **Start with context:** First call `clawhouse_get_task`
-- **Communicate frequently:** Regular progress updates via `clawhouse_send_message`
-- **Build incrementally:** Update deliverable as you work, not just at the end
-- **Be decisive:** When done or blocked, call `clawhouse_request_review` immediately
-- **Terminate after review:** Don't wait around after requesting review
-
-### Message Structure
-
-**Progress updates should be:**
-- Specific about what you're doing
-- Include any blockers or questions
-- Reference concrete progress made
-
-**Example:**
-```
-Starting analysis of competitor pricing data. Retrieved pricing for 3/5 competitors so far. 
-Question: Should I include enterprise pricing tiers or focus on standard plans?
-```
-
-**Deliverable structure:**
-- Clear sections with headers
-- Actionable insights or conclusions
-- Include methodology and sources
-- Link to any created artifacts
-
-## Plugin Setup
-
-### First-Time Configuration
-
-After installing the ClawHouse plugin, use the setup tool to configure your workspace:
-
-```
-clawhouse_setup
-```
-
-This tool returns the AGENTS.md directive block that should be added to your workspace. The agent should:
-1. Check if AGENTS.md contains the marker `<!-- clawhouse-directive -->`
-2. If missing, append the returned directive to AGENTS.md
-3. This enables automatic task tracking for non-trivial work
-
-The setup tool helps establish the workflow where agents create ClawHouse tasks before starting significant work, giving humans visibility into ongoing activities.
+1. **Self-task by default:** Create a ClawHouse task before starting non-trivial work
+2. **Status gates:** You can only `request_review` or `release` tasks in `working_on_it` status
+3. **No manual status changes:** All state transitions happen through the tools above
+4. **Deliverables in markdown:** Build up the deliverable incrementally using `update_deliverable`
+5. **Request review, don't just finish:** Always end with `clawhouse_request_review` so the human can approve
+6. **Release early:** If you can't complete a task, `clawhouse_release_task` to free it — don't spin
+7. **One task per sub-agent:** Spawn a dedicated sub-agent for each task to keep context clean
+8. **No assignment required:** Any bot can claim any `ready_for_bot` task
 
 ## Error Handling
 
-| Error | Likely Cause | Solution |
-|-------|-------------|----------|
-| `Task not found` | Invalid taskId | Check taskId in spawn parameters |
-| `Task not in working_on_it` | Task claimed by other agent | Release and re-claim if needed |
-| `401 Unauthorized` | Invalid bot token | Check plugin configuration |
-| `clawhouse_get_task returns null` | No available tasks | Normal — stop checking |
-
-## Migration from v1
-
-**If you see old tools in use:**
-- `clawhouse_done` → Use `clawhouse_request_review` instead
-- `clawhouse_giveup` → Use `clawhouse_request_review` instead
-- Direct task work in main session → Spawn sub-agent instead
-
-**Backward compatibility:** Old tools still work but are deprecated.
-
----
-
-**Remember:** Task Orchestration v2 is about separation of concerns — main sessions orchestrate, sub-agents execute, humans review.
+| Error | Meaning | Action |
+|---|---|---|
+| `clawhouse_list_tasks` returns empty | No tasks available | Stop checking — do not retry in a loop |
+| 404 on `clawhouse_claim_task` | Task not in `ready_for_bot` or doesn't exist | Another bot may have claimed it. Try a different task. |
+| 404 on `clawhouse_request_review` | Task not in `working_on_it` status | Check if task was already reviewed or released |
+| 404 on `clawhouse_release_task` | Task not in `working_on_it` status | Task may have been released already |
+| 401 Unauthorized | Bot token invalid | Check channel configuration |

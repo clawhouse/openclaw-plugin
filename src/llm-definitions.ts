@@ -13,12 +13,6 @@ import { Type } from '@sinclair/typebox';
 // tools.ts spreads these and adds only the execute handler.
 
 export const TOOLS = {
-  GET_NEXT_TASK: {
-    name: 'clawhouse_get_next_task',
-    description:
-      'Pick up the next available task from ClawHouse. Atomically claims the oldest ready_for_bot task and moves it to working_on_it. Returns the task object with instructions, or null if none available. DEPRECATED: Use clawhouse_claim_task instead for Task Orchestration v2.',
-    parameters: Type.Object({}),
-  },
   GET_TASK: {
     name: 'clawhouse_get_task',
     description:
@@ -81,34 +75,6 @@ export const TOOLS = {
             'Filter by status: ready_for_bot, working_on_it, waiting_for_human, done',
         }),
       ),
-    }),
-  },
-  DONE: {
-    name: 'clawhouse_done',
-    description:
-      'DEPRECATED: Use clawhouse_request_review instead. Mark a working_on_it task as completed. Moves it to waiting_for_human. Always include a deliverable documenting your work in markdown.',
-    parameters: Type.Object({
-      taskId: Type.String({ description: 'Task UUID' }),
-      reason: Type.String({ description: 'Why the task is complete' }),
-      deliverable: Type.String({
-        description:
-          'Markdown deliverable documenting what was done and results',
-      }),
-    }),
-  },
-  GIVEUP: {
-    name: 'clawhouse_giveup',
-    description:
-      'DEPRECATED: Use clawhouse_request_review instead. Give up on a working_on_it task. Moves it to waiting_for_human so a human can help. Always include a deliverable with partial progress.',
-    parameters: Type.Object({
-      taskId: Type.String({ description: 'Task UUID' }),
-      reason: Type.String({
-        description: 'Why the task cannot be completed',
-      }),
-      deliverable: Type.String({
-        description:
-          'Markdown deliverable documenting partial progress and blockers',
-      }),
     }),
   },
   CREATE_TASK: {

@@ -132,17 +132,6 @@ export function createClawHouseTools(
 
   return [
     {
-      ...TOOLS.GET_NEXT_TASK,
-      async execute(_id, params) {
-        try {
-          const result = await client.getNextTask();
-          return textResult(result);
-        } catch (err) {
-          return errorResult(err);
-        }
-      },
-    },
-    {
       ...TOOLS.GET_TASK,
       async execute(_id, params) {
         try {
@@ -230,34 +219,6 @@ export function createClawHouseTools(
       },
     },
     {
-      ...TOOLS.DONE,
-      async execute(_id, params) {
-        try {
-          const taskId = validateStringParam(params, 'taskId', true);
-          const reason = validateStringParam(params, 'reason', true);
-          const deliverable = validateStringParam(params, 'deliverable', true);
-          const result = await client.done({ taskId, reason, deliverable });
-          return textResult(result);
-        } catch (err) {
-          return errorResult(err);
-        }
-      },
-    },
-    {
-      ...TOOLS.GIVEUP,
-      async execute(_id, params) {
-        try {
-          const taskId = validateStringParam(params, 'taskId', true);
-          const reason = validateStringParam(params, 'reason', true);
-          const deliverable = validateStringParam(params, 'deliverable', true);
-          const result = await client.giveup({ taskId, reason, deliverable });
-          return textResult(result);
-        } catch (err) {
-          return errorResult(err);
-        }
-      },
-    },
-    {
       ...TOOLS.CREATE_TASK,
       async execute(_id, params) {
         try {
@@ -277,7 +238,7 @@ export function createClawHouseTools(
 <!-- clawhouse-directive -->
 When ClawHouse is connected, create a task before starting any non-trivial work. This gives your human visibility into what you're doing.
 
-**Flow:** \`clawhouse_create_task\` → \`clawhouse_get_next_task\` (claims it) → work + \`clawhouse_comment\` updates → \`clawhouse_done\` or \`clawhouse_giveup\`
+**Flow:** \`clawhouse_create_task\` → \`clawhouse_claim_task\` → spawn sub-agent → work + updates → \`clawhouse_request_review\`
 
 **Exempt:** Quick one-liners, simple lookups, config changes — anything that takes seconds.
 
