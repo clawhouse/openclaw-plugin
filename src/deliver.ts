@@ -25,6 +25,12 @@ const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
 // Download timeout (30 seconds)
 const DOWNLOAD_TIMEOUT_MS = 30 * 1000;
 
+// Rate limiting: maximum attachments per message
+const MAX_ATTACHMENTS_PER_MESSAGE = 10;
+
+// Rate limiting: maximum total download size per message (50MB)
+const MAX_TOTAL_DOWNLOAD_SIZE = 50 * 1024 * 1024;
+
 // Allowed content types for security
 const ALLOWED_CONTENT_TYPES = [
   'image/',
@@ -71,9 +77,34 @@ function validateDownloadUrl(url: string): void {
     if (parsed.protocol !== 'https:') {
       throw new Error('Only HTTPS URLs are allowed');
     }
-    if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+    
+    // Block localhost and private IP ranges
+    const hostname = parsed.hostname.toLowerCase();
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1') {
       throw new Error('Local URLs are not allowed');
     }
+    
+    // Block private IP ranges (RFC 1918 and others)
+    const ipv4Patterns = [
+      /^10\./,           // 10.0.0.0/8
+      /^192\.168\./,     // 192.168.0.0/16
+      /^172\.(1[6-9]|2[0-9]|3[0-1])\./,  // 172.16.0.0/12
+      /^169\.254\./,     // Link-local 169.254.0.0/16
+      /^0\./,            // Current network
+      /^127\./,          // Loopback
+    ];
+    
+    for (const pattern of ipv4Patterns) {
+      if (pattern.test(hostname)) {
+        throw new Error('Private IP addresses are not allowed');
+      }
+    }
+    
+    // Validate URL length to prevent DoS
+    if (url.length > 2048) {
+      throw new Error('URL too long (max 2048 characters)');
+    }
+    
   } catch (error) {
     throw new Error(`Invalid URL: ${error instanceof Error ? error.message : String(error)}`);
   }
@@ -110,13 +141,25 @@ async function fetchAndSaveMedia(
     throw new Error(`File too large: ${attachment.size} bytes (max: ${MAX_ATTACHMENT_SIZE})`);
   }
 
-  // Generate safe file path
+  // Generate safe file path with additional security checks
   const sanitizedName = sanitizeFileName(attachment.name);
+  
+  // Additional validation - ensure no path traversal attempts
+  if (sanitizedName.includes('..') || sanitizedName.includes('/') || sanitizedName.includes('\\')) {
+    throw new Error('Invalid filename: contains path traversal characters');
+  }
+  
   // Only append extension if the sanitized name doesn't already have one
   const hasExt = extname(sanitizedName).length > 0;
   const fileName = hasExt
     ? `${randomUUID()}_${sanitizedName}`
     : `${randomUUID()}_${sanitizedName}${extname(attachment.name) || '.bin'}`;
+  
+  // Final validation of complete filename
+  if (fileName.length > 255) {
+    throw new Error('Generated filename too long (max 255 characters)');
+  }
+  
   const filePath = resolvePluginStorePath(`media/inbound/${fileName}`);
 
   // Ensure directory exists
@@ -125,6 +168,7 @@ async function fetchAndSaveMedia(
   // Download with timeout and validations
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
+  let fileStream: ReturnType<typeof createWriteStream> | null = null;
 
   try {
     const response = await fetch(attachment.url, {
@@ -159,13 +203,29 @@ async function fetchAndSaveMedia(
 
     // Stream the response body to disk with size tracking
     const nodeStream = Readable.fromWeb(response.body as never);
-    const fileStream = createWriteStream(filePath);
+    fileStream = createWriteStream(filePath);
 
     let bytesWritten = 0;
+    let sizeExceeded = false;
+    
     nodeStream.on('data', (chunk) => {
       bytesWritten += chunk.length;
-      if (bytesWritten > MAX_ATTACHMENT_SIZE) {
+      if (bytesWritten > MAX_ATTACHMENT_SIZE && !sizeExceeded) {
+        sizeExceeded = true;
         nodeStream.destroy(new Error('File size limit exceeded during download'));
+      }
+    });
+
+    // Handle stream errors properly
+    nodeStream.on('error', (err) => {
+      if (fileStream && !fileStream.destroyed) {
+        fileStream.destroy();
+      }
+    });
+
+    fileStream.on('error', (err) => {
+      if (!nodeStream.destroyed) {
+        nodeStream.destroy();
       }
     });
 
@@ -177,12 +237,19 @@ async function fetchAndSaveMedia(
     };
 
   } catch (error) {
+    // Ensure streams are properly closed
+    if (fileStream && !fileStream.destroyed) {
+      fileStream.destroy();
+      fileStream = null;
+    }
+
     // Clean up partial file if download failed
     try {
-      const fs = require('fs') as typeof import('fs');
+      // Use fs.promises import instead of require for better type safety
+      const fs = await import('node:fs');
       await fs.promises.unlink(filePath);
     } catch {
-      // Ignore cleanup errors
+      // Ignore cleanup errors - file might not have been created
     }
 
     if (controller.signal.aborted) {
@@ -192,6 +259,10 @@ async function fetchAndSaveMedia(
     throw new Error(`Failed to download attachment: ${error instanceof Error ? error.message : String(error)}`);
   } finally {
     clearTimeout(timeoutId);
+    // Final cleanup - ensure file stream is closed
+    if (fileStream && !fileStream.destroyed) {
+      fileStream.destroy();
+    }
   }
 }
 
@@ -219,11 +290,28 @@ export async function deliverMessageToAgent(
   );
 
   // Download attachments if present
+  const attachments = message.attachments ?? [];
+  
+  // Validate attachment count
+  if (attachments.length > MAX_ATTACHMENTS_PER_MESSAGE) {
+    log.warn(`Message has ${attachments.length} attachments, limiting to ${MAX_ATTACHMENTS_PER_MESSAGE}`);
+  }
+  
+  // Calculate total attachment size for rate limiting
+  const totalSize = attachments
+    .slice(0, MAX_ATTACHMENTS_PER_MESSAGE)
+    .reduce((sum, att) => sum + (att.size || 0), 0);
+    
+  if (totalSize > MAX_TOTAL_DOWNLOAD_SIZE) {
+    log.warn(`Total attachment size ${totalSize} bytes exceeds limit ${MAX_TOTAL_DOWNLOAD_SIZE} bytes`);
+    // Don't fail the entire message, just log the warning
+  }
+
   const mediaPaths: string[] = [];
   const mediaTypes: string[] = [];
   const mediaUrls: string[] = [];
 
-  for (const [index, attachment] of (message.attachments ?? []).entries()) {
+  for (const [index, attachment] of attachments.slice(0, MAX_ATTACHMENTS_PER_MESSAGE).entries()) {
     if (!attachment.url) {
       log.warn(`Skipping attachment ${index}: no URL provided`);
       continue;
