@@ -81,6 +81,44 @@ function errorResult(err: unknown): {
 }
 
 /**
+ * Type-safe parameter validation helpers
+ */
+function validateStringParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: true
+): string;
+function validateStringParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: false
+): string | undefined;
+function validateStringParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: boolean
+): string | undefined {
+  const value = params[key];
+  
+  if (value == null) {
+    if (required) {
+      throw new Error(`Required parameter '${key}' is missing`);
+    }
+    return undefined;
+  }
+  
+  if (typeof value !== 'string') {
+    throw new Error(`Parameter '${key}' must be a string, got ${typeof value}`);
+  }
+  
+  if (required && value.trim() === '') {
+    throw new Error(`Required parameter '${key}' cannot be empty`);
+  }
+  
+  return value;
+}
+
+/**
  * Creates all ClawHouse agent tools.
  * Returns null if the channel is not configured.
  */
@@ -108,9 +146,8 @@ export function createClawHouseTools(
       ...TOOLS.GET_TASK,
       async execute(_id, params) {
         try {
-          const result = await client.getTask({
-            taskId: params.taskId as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const result = await client.getTask({ taskId });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -121,9 +158,8 @@ export function createClawHouseTools(
       ...TOOLS.CLAIM_TASK,
       async execute(_id, params) {
         try {
-          const result = await client.claimTask({
-            taskId: params.taskId as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const result = await client.claimTask({ taskId });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -134,9 +170,8 @@ export function createClawHouseTools(
       ...TOOLS.RELEASE_TASK,
       async execute(_id, params) {
         try {
-          const result = await client.releaseTask({
-            taskId: params.taskId as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const result = await client.releaseTask({ taskId });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -147,10 +182,9 @@ export function createClawHouseTools(
       ...TOOLS.SEND_MESSAGE,
       async execute(_id, params) {
         try {
-          const result = await client.sendMessage({
-            content: params.content as string,
-            taskId: params.taskId as string | undefined,
-          });
+          const content = validateStringParam(params, 'content', true);
+          const taskId = validateStringParam(params, 'taskId', false);
+          const result = await client.sendMessage({ content, taskId });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -161,10 +195,9 @@ export function createClawHouseTools(
       ...TOOLS.UPDATE_DELIVERABLE,
       async execute(_id, params) {
         try {
-          const result = await client.updateDeliverable({
-            taskId: params.taskId as string,
-            deliverable: params.deliverable as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const deliverable = validateStringParam(params, 'deliverable', true);
+          const result = await client.updateDeliverable({ taskId, deliverable });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -175,10 +208,9 @@ export function createClawHouseTools(
       ...TOOLS.REQUEST_REVIEW,
       async execute(_id, params) {
         try {
-          const result = await client.requestReview({
-            taskId: params.taskId as string,
-            comment: params.comment as string | undefined,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const comment = validateStringParam(params, 'comment', false);
+          const result = await client.requestReview({ taskId, comment });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -189,9 +221,8 @@ export function createClawHouseTools(
       ...TOOLS.LIST_TASKS,
       async execute(_id, params) {
         try {
-          const result = await client.listTasks({
-            status: params.status as string | undefined,
-          });
+          const status = validateStringParam(params, 'status', false);
+          const result = await client.listTasks({ status });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -202,11 +233,10 @@ export function createClawHouseTools(
       ...TOOLS.DONE,
       async execute(_id, params) {
         try {
-          const result = await client.done({
-            taskId: params.taskId as string,
-            reason: params.reason as string,
-            deliverable: params.deliverable as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const reason = validateStringParam(params, 'reason', true);
+          const deliverable = validateStringParam(params, 'deliverable', true);
+          const result = await client.done({ taskId, reason, deliverable });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -217,11 +247,10 @@ export function createClawHouseTools(
       ...TOOLS.GIVEUP,
       async execute(_id, params) {
         try {
-          const result = await client.giveup({
-            taskId: params.taskId as string,
-            reason: params.reason as string,
-            deliverable: params.deliverable as string,
-          });
+          const taskId = validateStringParam(params, 'taskId', true);
+          const reason = validateStringParam(params, 'reason', true);
+          const deliverable = validateStringParam(params, 'deliverable', true);
+          const result = await client.giveup({ taskId, reason, deliverable });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
@@ -232,10 +261,9 @@ export function createClawHouseTools(
       ...TOOLS.CREATE_TASK,
       async execute(_id, params) {
         try {
-          const result = await client.createTask({
-            title: params.title as string,
-            instructions: params.instructions as string | undefined,
-          });
+          const title = validateStringParam(params, 'title', true);
+          const instructions = validateStringParam(params, 'instructions', false);
+          const result = await client.createTask({ title, instructions });
           return textResult(result);
         } catch (err) {
           return errorResult(err);
