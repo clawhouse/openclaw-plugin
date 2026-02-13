@@ -383,8 +383,9 @@ async function pollAndDeliver(
     // SEED is a sentinel value indicating we've completed the first-run
     // flow but had no real cursor (empty inbox). Don't send it to the API
     // since it's not a valid datetime cursor.
-    const isFirstRun = !cursor || cursor === 'SEED';
-    const apiCursor = cursor && cursor !== 'SEED' ? cursor : undefined;
+    const SEED = 'SEED';
+    const isFirstRun = !cursor || cursor === SEED;
+    const apiCursor = cursor && cursor !== SEED ? cursor : undefined;
 
     const response = await client.listMessages({
       ...(apiCursor ? { cursor: apiCursor } : {}),
@@ -404,11 +405,9 @@ async function pollAndDeliver(
 
       log.info('Connected to ClawHouse. Ready to receive messages and tasks.');
 
-      // Return the API cursor, or empty string as sentinel when API returns
-      // null (empty inbox) so subsequent polls don't re-trigger first-run flow.
-      // Empty string is falsy for cursor != null check but won't be sent to
-      // the API since we only include cursor when it's non-null and non-empty.
-      return response.cursor ?? '';
+      // Return the API cursor, or SEED as sentinel when API returns null
+      // (empty inbox) so subsequent polls don't re-trigger first-run flow.
+      return response.cursor ?? SEED;
     }
 
     if (response.items.length === 0) return null;
