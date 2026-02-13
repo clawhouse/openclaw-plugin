@@ -15,6 +15,8 @@ import WebSocket from 'ws';
 
 const PING_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes (API GW idle timeout = 10 min)
 const POLL_FALLBACK_INTERVAL_MS = 30 * 1000; // 30s fallback when WS is down
+const WS_CONNECTION_TIMEOUT_MS = 30 * 1000; // 30s timeout for initial connection
+const WS_PONG_TIMEOUT_MS = 10 * 1000; // 10s timeout waiting for pong response
 const BACKOFF_INITIAL_MS = 2000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_FACTOR = 1.8;
@@ -188,23 +190,60 @@ async function runWebSocketConnection(opts: {
   return new Promise<string | null>((resolve, reject) => {
     const ws = new WebSocket(`${wsUrl}?ticket=${ticket}`);
     let pingInterval: ReturnType<typeof setInterval> | undefined;
+    let connectionTimer: ReturnType<typeof setTimeout> | undefined;
+    let pongTimer: ReturnType<typeof setTimeout> | undefined;
+    let isConnected = false;
 
-    // Centralized cleanup to prevent interval leaks
+    // Centralized cleanup to prevent timer leaks
     const cleanup = () => {
       if (pingInterval !== undefined) {
         clearInterval(pingInterval);
         pingInterval = undefined;
       }
+      if (connectionTimer !== undefined) {
+        clearTimeout(connectionTimer);
+        connectionTimer = undefined;
+      }
+      if (pongTimer !== undefined) {
+        clearTimeout(pongTimer);
+        pongTimer = undefined;
+      }
     };
 
+    // Connection timeout - if no 'open' event within timeout, fail
+    connectionTimer = setTimeout(() => {
+      if (!isConnected) {
+        cleanup();
+        ws.close();
+        reject(new Error(`WebSocket connection timeout after ${WS_CONNECTION_TIMEOUT_MS}ms`));
+      }
+    }, WS_CONNECTION_TIMEOUT_MS);
+
     ws.on('open', () => {
+      isConnected = true;
+      if (connectionTimer !== undefined) {
+        clearTimeout(connectionTimer);
+        connectionTimer = undefined;
+      }
+      
       ctx.setStatus({ running: true, lastStartAt: Date.now() });
       log.info('WebSocket connected.');
 
-      // Keepalive ping every 5 minutes
+      // Keepalive ping every 5 minutes with pong timeout handling
       pingInterval = setInterval(() => {
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ action: 'ping' }));
+          try {
+            ws.send(JSON.stringify({ action: 'ping' }));
+            
+            // Start pong timeout
+            pongTimer = setTimeout(() => {
+              log.warn('Pong timeout - closing WebSocket connection');
+              ws.close(1002, 'pong timeout');
+            }, WS_PONG_TIMEOUT_MS);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            log.warn(`Failed to send ping: ${message}`);
+          }
         }
       }, PING_INTERVAL_MS);
 
@@ -221,8 +260,15 @@ async function runWebSocketConnection(opts: {
         if (msg.action === 'notify') {
           // Fix CP-05: enqueue notification-triggered poll through mutex
           enqueuePoll(client, ctx, () => cursor, (c) => { cursor = c ?? cursor; }, log);
+        } else if (msg.action === 'pong') {
+          // Clear pong timeout - connection is healthy
+          if (pongTimer !== undefined) {
+            clearTimeout(pongTimer);
+            pongTimer = undefined;
+          }
+          log.debug('Received pong - connection healthy');
         }
-        // Ignore pong and other messages
+        // Ignore other message types
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         log.warn(`Error processing WS message: ${message}`);
@@ -231,14 +277,45 @@ async function runWebSocketConnection(opts: {
 
     ws.on('close', (code, reason) => {
       cleanup();
+      isConnected = false;
       ctx.setStatus({ running: false, lastStopAt: Date.now() });
-      log.info(`WebSocket closed: ${code} ${reason.toString()}`);
+      
+      // Classify close codes for better logging and error handling
+      if (code === 1000) {
+        log.info(`WebSocket closed normally: ${code} ${reason.toString()}`);
+      } else if (code === 1001) {
+        log.info(`WebSocket closed - endpoint going away: ${code} ${reason.toString()}`);
+      } else if (code >= 1002 && code <= 1011) {
+        log.warn(`WebSocket closed with error: ${code} ${reason.toString()}`);
+        ctx.setStatus({ 
+          running: false, 
+          lastStopAt: Date.now(),
+          lastError: `WebSocket closed with code ${code}: ${reason.toString()}`
+        });
+      } else if (code >= 4000) {
+        log.warn(`WebSocket closed with application error: ${code} ${reason.toString()}`);
+        ctx.setStatus({ 
+          running: false, 
+          lastStopAt: Date.now(),
+          lastError: `Application error ${code}: ${reason.toString()}`
+        });
+      } else {
+        log.info(`WebSocket closed: ${code} ${reason.toString()}`);
+      }
+      
       resolve(cursor);
     });
 
     ws.on('error', (err) => {
       cleanup();
-      ctx.setStatus({ running: false, lastError: err.message });
+      isConnected = false;
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      log.error(`WebSocket error: ${errorMessage}`);
+      ctx.setStatus({ 
+        running: false, 
+        lastError: errorMessage,
+        lastStopAt: Date.now()
+      });
       reject(err);
     });
 
@@ -246,8 +323,11 @@ async function runWebSocketConnection(opts: {
     ctx.abortSignal.addEventListener(
       'abort',
       () => {
+        log.info('Shutdown requested - closing WebSocket');
         cleanup();
-        ws.close(1000, 'shutdown');
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close(1000, 'shutdown');
+        }
       },
       { once: true },
     );
