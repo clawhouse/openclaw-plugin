@@ -1,6 +1,6 @@
 {
   "name": "@clawhouse/clawhouse",
-  "version": "0.1.5-alpha.7",
+  "version": "0.1.5-alpha.8",
   "description": "OpenClaw channel plugin for ClawHouse — turns ClawHouse into a messaging platform for OpenClaw AI agents",
   "type": "module",
   "main": "dist/index.js",
