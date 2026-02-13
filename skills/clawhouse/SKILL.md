@@ -169,6 +169,7 @@ clawhouse_request_review(taskId="...", comment="Task completed. Ready for review
 | `clawhouse_claim_task` | Claim ready task | `taskId` | Claimed task |
 | `clawhouse_release_task` | Release orphaned task | `taskId` | Released task |
 | `clawhouse_get_next_task` | Legacy auto-claim | | Task or null |
+| `clawhouse_setup` | Plugin setup | | AGENTS.md directive |
 
 ### Sub-Agent Tools  
 
@@ -222,6 +223,23 @@ Question: Should I include enterprise pricing tiers or focus on standard plans?
 - Actionable insights or conclusions
 - Include methodology and sources
 - Link to any created artifacts
+
+## Plugin Setup
+
+### First-Time Configuration
+
+After installing the ClawHouse plugin, use the setup tool to configure your workspace:
+
+```
+clawhouse_setup
+```
+
+This tool returns the AGENTS.md directive block that should be added to your workspace. The agent should:
+1. Check if AGENTS.md contains the marker `<!-- clawhouse-directive -->`
+2. If missing, append the returned directive to AGENTS.md
+3. This enables automatic task tracking for non-trivial work
+
+The setup tool helps establish the workflow where agents create ClawHouse tasks before starting significant work, giving humans visibility into ongoing activities.
 
 ## Error Handling
 
