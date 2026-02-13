@@ -1,4 +1,4 @@
-// Fix PL-02: use ESM imports instead of require() for fs and path
+// Use ESM imports for Node.js built-in modules
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 
@@ -19,7 +19,7 @@ const BACKOFF_INITIAL_MS = 2000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_FACTOR = 1.8;
 
-// Fix CP-05: serialize poll operations to prevent duplicate message delivery
+// Serialize poll operations to prevent duplicate message delivery
 // Simple promise-chain mutex — each poll waits for the previous one to finish.
 let pollChain: Promise<void> = Promise.resolve();
 
@@ -59,7 +59,7 @@ function resetBackoff(state: BackoffState): void {
   state.attempt = 0;
 }
 
-// Fix PL-01: clean up abort listener to prevent memory leak
+// Clean up abort listener to prevent memory leak
 function sleepWithAbort(ms: number, signal: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     const onAbort = () => {
@@ -208,7 +208,7 @@ async function runWebSocketConnection(opts: {
         }
       }, PING_INTERVAL_MS);
 
-      // Fix CP-05: enqueue initial catch-up poll through mutex
+      // Enqueue initial catch-up poll through mutex
       enqueuePoll(client, ctx, () => cursor, (c) => { cursor = c ?? cursor; }, log);
     });
 
@@ -219,7 +219,7 @@ async function runWebSocketConnection(opts: {
           | { action: string };
 
         if (msg.action === 'notify') {
-          // Fix CP-05: enqueue notification-triggered poll through mutex
+          // Enqueue notification-triggered poll through mutex
           enqueuePoll(client, ctx, () => cursor, (c) => { cursor = c ?? cursor; }, log);
         }
         // Ignore pong and other messages
@@ -332,7 +332,7 @@ async function pollAndDeliver(
 
     log.info(`Received ${response.items.length} new message(s).`);
 
-    // Fix CP-05: save cursor after each successful delivery so a mid-batch
+    // Save cursor after each successful delivery so a mid-batch
     // failure doesn't cause the entire batch to be re-delivered on retry.
     for (const message of response.items) {
       // Skip bot's own messages to prevent echo loops
