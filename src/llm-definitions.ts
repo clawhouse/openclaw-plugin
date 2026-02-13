@@ -16,19 +16,65 @@ export const TOOLS = {
   GET_NEXT_TASK: {
     name: 'clawhouse_get_next_task',
     description:
-      'Pick up the next available task from ClawHouse. Atomically claims the oldest ready_for_bot task and moves it to working_on_it. Returns the task object with instructions, or null if none available.',
+      'Pick up the next available task from ClawHouse. Atomically claims the oldest ready_for_bot task and moves it to working_on_it. Returns the task object with instructions, or null if none available. DEPRECATED: Use clawhouse_claim_task instead for Task Orchestration v2.',
+    parameters: Type.Object({}),
+  },
+  GET_TASK: {
+    name: 'clawhouse_get_task',
+    description:
+      'Fetch task by ID. Returns complete task context including instructions, deliverable, status, and message history. This is typically the first action a sub-agent takes to get full task context.',
     parameters: Type.Object({
-      projectId: Type.Optional(
-        Type.String({ description: 'Filter to a specific project UUID' }),
-      ),
+      taskId: Type.String({ description: 'Task UUID to fetch' }),
+    }),
+  },
+  CLAIM_TASK: {
+    name: 'clawhouse_claim_task',
+    description:
+      'Claim a ready_for_bot task and move it to working_on_it status. Used by main session before spawning a sub-agent.',
+    parameters: Type.Object({
+      taskId: Type.String({ description: 'Task UUID to claim' }),
+    }),
+  },
+  RELEASE_TASK: {
+    name: 'clawhouse_release_task',
+    description:
+      'Release a task back to ready_for_bot status. Used for failure recovery when a sub-agent crashes or needs to give up.',
+    parameters: Type.Object({
+      taskId: Type.String({ description: 'Task UUID to release' }),
+    }),
+  },
+  SEND_MESSAGE: {
+    name: 'clawhouse_send_message',
+    description:
+      'Send a message in the task thread (status update, question, progress report, etc). Maps to the existing messages.send API.',
+    parameters: Type.Object({
+      content: Type.String({ description: 'Message content' }),
+      taskId: Type.Optional(Type.String({ description: 'Task UUID (optional if context provides it)' })),
+    }),
+  },
+  UPDATE_DELIVERABLE: {
+    name: 'clawhouse_update_deliverable',
+    description:
+      'Update the task\'s deliverable markdown. Sub-agents should build up deliverables incrementally as they work.',
+    parameters: Type.Object({
+      taskId: Type.String({ description: 'Task UUID' }),
+      deliverable: Type.String({ description: 'Markdown deliverable content' }),
+    }),
+  },
+  REQUEST_REVIEW: {
+    name: 'clawhouse_request_review',
+    description:
+      'Signal the human to review this task. Moves task to waiting_for_human status. Sub-agent should terminate after calling this. Replaces clawhouse_done and clawhouse_giveup.',
+    parameters: Type.Object({
+      taskId: Type.String({ description: 'Task UUID' }),
+      comment: Type.Optional(Type.String({ description: 'Optional comment for the human reviewer' })),
     }),
   },
   LIST_TASKS: {
     name: 'clawhouse_list_tasks',
     description:
-      'List all tasks in a ClawHouse project, ordered by most recently updated.',
+      'List all tasks in ClawHouse, ordered by most recently updated.',
     parameters: Type.Object({
-      projectId: Type.String({ description: 'Project UUID (required)' }),
       status: Type.Optional(
         Type.String({
           description:
@@ -40,7 +86,7 @@ export const TOOLS = {
   DONE: {
     name: 'clawhouse_done',
     description:
-      'Mark a working_on_it task as completed. Moves it to waiting_for_human. Always include a deliverable documenting your work in markdown.',
+      'DEPRECATED: Use clawhouse_request_review instead. Mark a working_on_it task as completed. Moves it to waiting_for_human. Always include a deliverable documenting your work in markdown.',
     parameters: Type.Object({
       taskId: Type.String({ description: 'Task UUID' }),
       reason: Type.String({ description: 'Why the task is complete' }),
@@ -53,7 +99,7 @@ export const TOOLS = {
   GIVEUP: {
     name: 'clawhouse_giveup',
     description:
-      'Give up on a working_on_it task. Moves it to waiting_for_human so a human can help. Always include a deliverable with partial progress.',
+      'DEPRECATED: Use clawhouse_request_review instead. Give up on a working_on_it task. Moves it to waiting_for_human so a human can help. Always include a deliverable with partial progress.',
     parameters: Type.Object({
       taskId: Type.String({ description: 'Task UUID' }),
       reason: Type.String({
@@ -65,17 +111,11 @@ export const TOOLS = {
       }),
     }),
   },
-  LIST_PROJECTS: {
-    name: 'clawhouse_list_projects',
-    description: 'List all projects accessible to this bot in ClawHouse.',
-    parameters: Type.Object({}),
-  },
   CREATE_TASK: {
     name: 'clawhouse_create_task',
     description:
-      'Create a new task in a ClawHouse project. The task starts in ready_for_bot status.',
+      'Create a new task in ClawHouse. The task starts in ready_for_bot status.',
     parameters: Type.Object({
-      projectId: Type.String({ description: 'Project UUID' }),
       title: Type.String({ description: 'Task title (max 200 chars)' }),
       instructions: Type.Optional(
         Type.String({ description: 'Detailed instructions for the task' }),
@@ -87,22 +127,6 @@ export const TOOLS = {
     description:
       'Run after installing ClawHouse plugin. Returns the AGENTS.md directive block for self-tasking. The agent should check if AGENTS.md contains this block and add it if missing.',
     parameters: Type.Object({}),
-  },
-  CREATE_PROJECT: {
-    name: 'clawhouse_create_project',
-    description: 'Create a new project in ClawHouse.',
-    parameters: Type.Object({
-      name: Type.String({ description: 'Project name' }),
-      key: Type.String({
-        description: 'Project key (2-10 uppercase letters)',
-      }),
-      description: Type.Optional(
-        Type.String({ description: 'Project description' }),
-      ),
-      color: Type.Optional(
-        Type.String({ description: 'Hex color code (e.g. #3B82F6)' }),
-      ),
-    }),
   },
 } as const;
 
