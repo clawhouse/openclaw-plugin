@@ -168,6 +168,26 @@ export class ClawHouseClient {
     return this.request('POST', 'tasks.getNextTask', input ?? {});
   }
 
+  async claimTask(input: { taskId: string }): Promise<Task> {
+    return this.request('POST', 'tasks.claim', input);
+  }
+
+  async releaseTask(input: { taskId: string }): Promise<Task> {
+    return this.request('POST', 'tasks.release', input);
+  }
+
+  async requestReview(input: { taskId: string; comment?: string }): Promise<Task> {
+    return this.request('POST', 'tasks.requestReview', input);
+  }
+
+  async updateDeliverable(input: { taskId: string; deliverable: string }): Promise<void> {
+    return this.request('POST', 'tasks.updateDeliverable', input);
+  }
+
+  async getTask(input: { taskId: string }): Promise<Task> {
+    return this.request('GET', 'tasks.get', input);
+  }
+
   async listProjects(): Promise<ProjectsListResponse> {
     return this.request('GET', 'projects.list', {});
   }

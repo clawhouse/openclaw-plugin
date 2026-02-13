@@ -107,6 +107,87 @@ export function createClawHouseTools(
       },
     },
     {
+      ...TOOLS.GET_TASK,
+      async execute(_id, params) {
+        try {
+          const result = await client.getTask({
+            taskId: params.taskId as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
+      ...TOOLS.CLAIM_TASK,
+      async execute(_id, params) {
+        try {
+          const result = await client.claimTask({
+            taskId: params.taskId as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
+      ...TOOLS.RELEASE_TASK,
+      async execute(_id, params) {
+        try {
+          const result = await client.releaseTask({
+            taskId: params.taskId as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
+      ...TOOLS.SEND_MESSAGE,
+      async execute(_id, params) {
+        try {
+          const result = await client.sendMessage({
+            content: params.content as string,
+            taskId: params.taskId as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
+      ...TOOLS.UPDATE_DELIVERABLE,
+      async execute(_id, params) {
+        try {
+          const result = await client.updateDeliverable({
+            taskId: params.taskId as string,
+            deliverable: params.deliverable as string,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
+      ...TOOLS.REQUEST_REVIEW,
+      async execute(_id, params) {
+        try {
+          const result = await client.requestReview({
+            taskId: params.taskId as string,
+            comment: params.comment as string | undefined,
+          });
+          return textResult(result);
+        } catch (err) {
+          return errorResult(err);
+        }
+      },
+    },
+    {
       ...TOOLS.LIST_TASKS,
       async execute(_id, params) {
         try {
