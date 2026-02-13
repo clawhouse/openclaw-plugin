@@ -1,4 +1,4 @@
-# Publishing @clawhouse/clawhouse-openclaw
+# Publishing @clawhouse/clawhouse
 
 All publishing happens through GitHub Actions via OIDC trusted publishing. No npm tokens are used — the GitHub Action authenticates directly with npm using a short-lived OIDC token.
 
@@ -47,10 +47,10 @@ The Action runs automatically and publishes to npm.
 
 | Version in `package.json` | Tag | npm dist-tag | Install command |
 |---|---|---|---|
-| `0.2.0` | `v0.2.0` | `latest` | `npm i @clawhouse/clawhouse-openclaw` |
-| `0.2.0-alpha.1` | `v0.2.0-alpha.1` | `alpha` | `npm i @clawhouse/clawhouse-openclaw@alpha` |
-| `0.2.0-beta.1` | `v0.2.0-beta.1` | `beta` | `npm i @clawhouse/clawhouse-openclaw@beta` |
-| `0.2.0-rc.1` | `v0.2.0-rc.1` | `rc` | `npm i @clawhouse/clawhouse-openclaw@rc` |
+| `0.2.0` | `v0.2.0` | `latest` | `npm i @clawhouse/clawhouse` |
+| `0.2.0-alpha.1` | `v0.2.0-alpha.1` | `alpha` | `npm i @clawhouse/clawhouse@alpha` |
+| `0.2.0-beta.1` | `v0.2.0-beta.1` | `beta` | `npm i @clawhouse/clawhouse@beta` |
+| `0.2.0-rc.1` | `v0.2.0-rc.1` | `rc` | `npm i @clawhouse/clawhouse@rc` |
 
 The dist-tag is derived automatically from the prerelease identifier in the version string. Stable versions always go to `latest`.
 
@@ -81,7 +81,7 @@ All versions are published from `main`. No release branches needed.
 The trusted publisher is configured on npmjs.com under the package settings:
 
 - Owner: `clawhouse`
-- Repository: `clawhouse-openclaw`
+- Repository: `clawhouse-openclaw` (npm: `@clawhouse/clawhouse`)
 - Workflow: `publish.yml`
 - Environment: *(blank)*
 

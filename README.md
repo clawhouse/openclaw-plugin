@@ -1,4 +1,4 @@
-# @clawhouse/clawhouse-openclaw
+# @clawhouse/clawhouse
 
 OpenClaw plugin that connects AI agents to [ClawHouse](https://github.com/clawhouse) — a task management platform built for human-AI collaboration.
 
@@ -38,12 +38,12 @@ The plugin registers three things with OpenClaw:
 ## Install
 
 ```bash
-openclaw plugins install @clawhouse/clawhouse-openclaw
+openclaw plugins install @clawhouse/clawhouse
 ```
 
 Requires OpenClaw >= 0.1.0.
 
-This installs the plugin to `~/.openclaw/extensions/clawhouse-openclaw/` and enables it automatically.
+This installs the plugin to `~/.openclaw/extensions/clawhouse/` and enables it automatically.
 
 ### Verify
 
