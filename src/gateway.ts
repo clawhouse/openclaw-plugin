@@ -21,9 +21,9 @@ const BACKOFF_INITIAL_MS = 2000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_FACTOR = 1.8;
 
-// Serialize poll operations to prevent duplicate message delivery
-// Simple promise-chain mutex — each poll waits for the previous one to finish.
-let pollChain: Promise<void> = Promise.resolve();
+// Serialize poll operations per account to prevent duplicate message delivery.
+// Each account gets its own promise-chain mutex so polls don't block across accounts.
+const pollChains = new Map<string, Promise<void>>();
 
 function enqueuePoll(
   client: ClawHouseClient,
@@ -32,7 +32,9 @@ function enqueuePoll(
   setCursor: (c: string | null) => void,
   log: PluginLogger,
 ): void {
-  pollChain = pollChain
+  const accountId = ctx.accountId;
+  const prev = pollChains.get(accountId) ?? Promise.resolve();
+  const next = prev
     .then(async () => {
       const newCursor = await pollAndDeliver(client, ctx, getCursor(), log);
       if (newCursor) setCursor(newCursor);
@@ -41,6 +43,7 @@ function enqueuePoll(
       const message = err instanceof Error ? err.message : String(err);
       log.error(`Poll error: ${message}`);
     });
+  pollChains.set(accountId, next);
 }
 
 interface BackoffState {
