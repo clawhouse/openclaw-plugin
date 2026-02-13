@@ -121,20 +121,6 @@ export function createClawHouseTools(
       },
     },
     {
-      ...TOOLS.COMMENT,
-      async execute(_id, params) {
-        try {
-          const result = await client.comment({
-            taskId: params.taskId as string,
-            content: params.content as string,
-          });
-          return textResult(result);
-        } catch (err) {
-          return errorResult(err);
-        }
-      },
-    },
-    {
       ...TOOLS.DONE,
       async execute(_id, params) {
         try {

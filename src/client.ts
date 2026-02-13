@@ -101,6 +101,10 @@ export class ClawHouseClient {
   }
 
   // Messages
+  async typing(input?: { taskId?: string }): Promise<void> {
+    return this.request('POST', 'messages.typing', input ?? {});
+  }
+
   async sendMessage(input: {
     userId?: string;
     content: string;
@@ -129,10 +133,6 @@ export class ClawHouseClient {
   }
 
   // Tasks
-  async comment(input: { taskId: string; content: string }): Promise<void> {
-    return this.request('POST', 'tasks.comment', input);
-  }
-
   async createTask(input: {
     projectId: string;
     title: string;

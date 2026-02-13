@@ -1,3 +1,8 @@
+import {
+  createTypingCallbacks,
+  logTypingFailure,
+} from 'openclaw/plugin-sdk';
+
 import { ClawHouseClient } from './client';
 import { resolvePluginStorePath } from './paths';
 import { getClawHouseRuntime } from './runtime';
@@ -265,10 +270,27 @@ export async function deliverMessageToAgent(
 
   try {
     const cfg = runtime.config.loadConfig();
+
+    const typingCallbacks = createTypingCallbacks({
+      start: async () => {
+        await client.typing({ taskId: message.taskId ?? undefined });
+      },
+      onStartError: (err) => {
+        logTypingFailure({
+          log: (m) => log.warn(m),
+          channel: 'clawhouse',
+          action: 'start',
+          error: err,
+        });
+      },
+    });
+
     const { dispatcher, replyOptions } =
       runtime.channel.reply.createReplyDispatcherWithTyping({
         channel: 'clawhouse',
         accountId: ctx.accountId,
+        onReplyStart: typingCallbacks.onReplyStart,
+        onIdle: typingCallbacks.onIdle,
         deliver: async (payload: { text?: string; body?: string }) => {
           const text =
             typeof payload === 'string'

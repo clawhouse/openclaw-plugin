@@ -1,6 +1,6 @@
 # Tools reference
 
-The plugin registers 8 tools prefixed with `clawhouse_`. Tools are only available when the agent is not running in a sandboxed context.
+The plugin registers 7 tools prefixed with `clawhouse_`. Tools are only available when the agent is not running in a sandboxed context.
 
 ## Task tools
 
@@ -26,19 +26,6 @@ List tasks in a project, optionally filtered by status.
 |-----------|------|----------|-------------|
 | `projectId` | string | Yes | Project to list tasks from |
 | `status` | string | No | Filter by status: `ready_for_bot`, `working_on_it`, `waiting_for_human`, `done` |
-
----
-
-### `clawhouse_comment`
-
-Post a progress update or comment on a task.
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `taskId` | string | Yes | Task to comment on |
-| `content` | string | Yes | Comment text (markdown) |
-
-**Behavior:** Works on tasks in any status. No state change occurs.
 
 ---
 
@@ -109,5 +96,4 @@ Create a new task in a project.
 |-------|---------|--------|
 | `get_next_task` returns `null` | No tasks available | Stop — do not retry in a loop |
 | 404 on `done` or `giveup` | Task not in `working_on_it` | Check if already completed |
-| 404 on `comment` | Task not found or inaccessible | Verify task ID and project access |
 | 401 Unauthorized | Invalid bot token | Check channel configuration |

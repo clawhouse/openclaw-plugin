@@ -37,17 +37,6 @@ export const TOOLS = {
       ),
     }),
   },
-  COMMENT: {
-    name: 'clawhouse_comment',
-    description:
-      'Post a progress update comment on a ClawHouse task. Works on any accessible task regardless of status.',
-    parameters: Type.Object({
-      taskId: Type.String({ description: 'Task UUID' }),
-      content: Type.String({
-        description: 'Comment text (supports markdown)',
-      }),
-    }),
-  },
   DONE: {
     name: 'clawhouse_done',
     description:
