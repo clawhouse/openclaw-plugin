@@ -14,7 +14,7 @@ import type {
 } from './types';
 import { randomUUID } from 'node:crypto';
 import { createWriteStream } from 'node:fs';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, unlink } from 'node:fs/promises';
 import { dirname, extname } from 'node:path';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
@@ -179,10 +179,9 @@ async function fetchAndSaveMedia(
   } catch (error) {
     // Clean up partial file if download failed
     try {
-      const fs = require('fs') as typeof import('fs');
-      await fs.promises.unlink(filePath);
+      await unlink(filePath);
     } catch {
-      // Ignore cleanup errors
+      // Ignore cleanup errors - file might not have been created
     }
 
     if (controller.signal.aborted) {
