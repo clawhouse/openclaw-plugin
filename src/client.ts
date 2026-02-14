@@ -14,6 +14,119 @@ import type {
 /** Default timeout for API requests (30 seconds). */
 const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
 
+/** Enhanced error class for ClawHouse API errors with user-friendly messages */
+export class ClawHouseError extends Error {
+  public readonly type: 'network' | 'auth' | 'server' | 'client' | 'timeout' | 'invalid_response';
+  public readonly statusCode?: number;
+  public readonly userMessage: string;
+  public readonly procedure: string;
+
+  constructor(
+    type: ClawHouseError['type'],
+    procedure: string,
+    message: string,
+    userMessage: string,
+    statusCode?: number,
+  ) {
+    super(message);
+    this.name = 'ClawHouseError';
+    this.type = type;
+    this.procedure = procedure;
+    this.userMessage = userMessage;
+    this.statusCode = statusCode;
+  }
+
+  static fromResponse(response: Response, procedure: string, responseText: string): ClawHouseError {
+    const status = response.status;
+    const statusText = response.statusText;
+
+    if (status === 401) {
+      return new ClawHouseError(
+        'auth',
+        procedure,
+        `Authentication failed: ${status} ${statusText} — ${responseText}`,
+        'Your bot token is invalid or has expired. Please check your authentication credentials.',
+        status
+      );
+    }
+    
+    if (status === 403) {
+      return new ClawHouseError(
+        'auth',
+        procedure,
+        `Authorization failed: ${status} ${statusText} — ${responseText}`,
+        'Your bot does not have permission to perform this action. Contact your administrator.',
+        status
+      );
+    }
+    
+    if (status >= 500) {
+      return new ClawHouseError(
+        'server',
+        procedure,
+        `Server error: ${status} ${statusText} — ${responseText}`,
+        'ClawHouse service is temporarily unavailable. Please try again in a few minutes.',
+        status
+      );
+    }
+    
+    if (status === 429) {
+      return new ClawHouseError(
+        'client',
+        procedure,
+        `Rate limit exceeded: ${status} ${statusText} — ${responseText}`,
+        'Too many requests. Please wait a moment before trying again.',
+        status
+      );
+    }
+
+    if (status === 400) {
+      return new ClawHouseError(
+        'client',
+        procedure,
+        `Bad request: ${status} ${statusText} — ${responseText}`,
+        'The request was invalid. Please check your input and try again.',
+        status
+      );
+    }
+
+    return new ClawHouseError(
+      'client',
+      procedure,
+      `HTTP error: ${status} ${statusText} — ${responseText}`,
+      `Request failed with error ${status}. Please try again or contact support if the problem persists.`,
+      status
+    );
+  }
+
+  static timeout(procedure: string, timeoutMs: number): ClawHouseError {
+    return new ClawHouseError(
+      'timeout',
+      procedure,
+      `Request to ${procedure} timed out after ${timeoutMs}ms`,
+      'The request took too long to complete. Please check your network connection and try again.'
+    );
+  }
+
+  static invalidResponse(procedure: string): ClawHouseError {
+    return new ClawHouseError(
+      'invalid_response',
+      procedure,
+      `Invalid tRPC response structure for ${procedure}`,
+      'Received an unexpected response from the server. Please try again or contact support.'
+    );
+  }
+
+  static network(procedure: string, originalError: Error): ClawHouseError {
+    return new ClawHouseError(
+      'network',
+      procedure,
+      `Network error for ${procedure}: ${originalError.message}`,
+      'Unable to connect to ClawHouse. Please check your internet connection and try again.'
+    );
+  }
+}
+
 export class ClawHouseClient {
   private botToken: string;
   private apiUrl: string;
@@ -59,38 +172,31 @@ export class ClawHouseClient {
           return `(failed to read response body: ${errMsg})`;
         });
 
-        // Categorize errors for better debugging
-        if (response.status === 401 || response.status === 403) {
-          throw new Error(
-            `ClawHouse API authentication failed: ${response.status} ${response.statusText} — ${text}`,
-          );
-        } else if (response.status >= 500) {
-          throw new Error(
-            `ClawHouse API server error: ${response.status} ${response.statusText} — ${text}`,
-          );
-        } else {
-          throw new Error(
-            `ClawHouse API error: ${response.status} ${response.statusText} — ${text}`,
-          );
-        }
+        throw ClawHouseError.fromResponse(response, procedure, text);
       }
 
       const json = (await response.json()) as { result?: { data?: T } };
 
       // Validate tRPC response structure
       if (!json.result || json.result.data === undefined) {
-        throw new Error(
-          `ClawHouse API returned invalid tRPC response structure for ${procedure}`,
-        );
+        throw ClawHouseError.invalidResponse(procedure);
       }
 
       return json.result.data;
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(
-          `ClawHouse API request to ${procedure} timed out after ${this.requestTimeoutMs}ms`,
-        );
+      if (err instanceof ClawHouseError) {
+        throw err;
       }
+      
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw ClawHouseError.timeout(procedure, this.requestTimeoutMs);
+      }
+      
+      if (err instanceof Error) {
+        // Network or other fetch errors
+        throw ClawHouseError.network(procedure, err);
+      }
+      
       throw err;
     } finally {
       clearTimeout(timer);
@@ -180,12 +286,30 @@ export class ClawHouseClient {
           signal: controller.signal,
         },
       );
+      
       if (!response.ok) {
-        return { ok: false, error: `HTTP ${response.status}` };
+        // Provide more user-friendly probe error messages
+        if (response.status === 401 || response.status === 403) {
+          return { ok: false, error: 'Authentication failed - check bot token' };
+        }
+        if (response.status >= 500) {
+          return { ok: false, error: 'ClawHouse server unavailable' };
+        }
+        return { ok: false, error: `HTTP ${response.status} - ${response.statusText}` };
       }
+      
       return { ok: true };
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return { ok: false, error: `Connection timeout after ${timeoutMs}ms` };
+      }
+      
       const message = err instanceof Error ? err.message : String(err);
+      // Simplify network errors for probe results
+      if (message.includes('fetch')) {
+        return { ok: false, error: 'Network connection failed' };
+      }
+      
       return { ok: false, error: message };
     } finally {
       clearTimeout(timer);
