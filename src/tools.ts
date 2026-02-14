@@ -104,9 +104,40 @@ function errorResult(err: unknown): {
   content: Array<{ type: string; text: string }>;
   isError: true;
 } {
-  const message = err instanceof Error ? err.message : String(err);
+  const rawMessage = err instanceof Error ? err.message : String(err);
+
+  // Parse common HTTP error patterns and provide user-friendly messages
+  let userMessage = rawMessage;
+  let suggestion = '';
+
+  // Check for HTTP error patterns from client.ts
+  if (rawMessage.includes('ClawHouse API error: 409')) {
+    userMessage = 'Task is already claimed by another bot. Use clawhouse_list_tasks to find available tasks.';
+    suggestion = 'Try listing tasks with status="ready_for_bot" to find unclaimed tasks.';
+  } else if (rawMessage.includes('ClawHouse API error: 404')) {
+    userMessage = 'Task not found. Verify the taskId is correct.';
+    suggestion = 'Use clawhouse_list_tasks to see all available tasks and verify the taskId.';
+  } else if (rawMessage.includes('authentication failed') || rawMessage.includes('401') || rawMessage.includes('403')) {
+    userMessage = 'Authentication failed. Check your bot token configuration.';
+    suggestion = 'Verify the bot token in your OpenClaw configuration is correct and has not expired.';
+  } else if (rawMessage.includes('server error') || /5\d\d/.test(rawMessage)) {
+    userMessage = 'ClawHouse server error. Try again in a moment.';
+    suggestion = 'The server encountered an error. Wait a few moments and retry your request.';
+  } else if (rawMessage.includes('timed out')) {
+    userMessage = 'Request timed out. The server may be busy.';
+    suggestion = 'Wait a moment and try again. If the problem persists, check your network connection.';
+  }
+
   return {
-    content: [{ type: 'text', text: JSON.stringify({ error: true, message }) }],
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        error: true,
+        message: userMessage,
+        ...(suggestion ? { suggestion } : {}),
+        originalError: rawMessage
+      }, null, 2)
+    }],
     isError: true,
   };
 }
