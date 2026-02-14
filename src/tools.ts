@@ -69,6 +69,51 @@ function textResult(data: unknown): {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
+function formatTaskResponse(task: any, summary: string, nextActions: string[]): {
+  content: Array<{ type: string; text: string }>;
+} {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        summary,
+        nextActions,
+        task
+      }, null, 2)
+    }]
+  };
+}
+
+function formatListResponse(tasks: any[], summary: string, nextActions: string[]): {
+  content: Array<{ type: string; text: string }>;
+} {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        summary,
+        nextActions,
+        tasks
+      }, null, 2)
+    }]
+  };
+}
+
+function formatConfirmation(summary: string, nextActions: string[], data?: unknown): {
+  content: Array<{ type: string; text: string }>;
+} {
+  return {
+    content: [{
+      type: 'text',
+      text: JSON.stringify({
+        summary,
+        nextActions,
+        ...(data ? { data } : {})
+      }, null, 2)
+    }]
+  };
+}
+
 function errorResult(err: unknown): {
   content: Array<{ type: string; text: string }>;
   isError: true;
@@ -137,7 +182,22 @@ export function createClawHouseTools(
         try {
           const taskId = validateStringParam(params, 'taskId', true);
           const result = await client.getTask({ taskId });
-          return textResult(result);
+
+          const nextActions: string[] = [];
+          if (result.status === 'ready_for_bot') {
+            nextActions.push('You can claim this task with clawhouse_claim_task');
+          } else if (result.status === 'working_on_it' && result.botId) {
+            nextActions.push('Update deliverable with clawhouse_update_deliverable');
+            nextActions.push('Request review when ready with clawhouse_request_review');
+          } else if (result.status === 'waiting_for_human') {
+            nextActions.push('Wait for human review or send a message with clawhouse_send_message');
+          }
+
+          return formatTaskResponse(
+            result,
+            `Task "${result.title}" is ${result.status}`,
+            nextActions
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -149,7 +209,16 @@ export function createClawHouseTools(
         try {
           const taskId = validateStringParam(params, 'taskId', true);
           const result = await client.claimTask({ taskId });
-          return textResult(result);
+
+          return formatTaskResponse(
+            result,
+            `Successfully claimed task "${result.title}"`,
+            [
+              'Use clawhouse_get_task to get full task context',
+              'Work on the task and update deliverable with clawhouse_update_deliverable',
+              'Request review when done with clawhouse_request_review'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -161,7 +230,15 @@ export function createClawHouseTools(
         try {
           const taskId = validateStringParam(params, 'taskId', true);
           const result = await client.releaseTask({ taskId });
-          return textResult(result);
+
+          return formatTaskResponse(
+            result,
+            `Released task "${result.title}"`,
+            [
+              'Task is now available for other bots to claim',
+              'Use clawhouse_list_tasks to find other tasks'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -174,7 +251,14 @@ export function createClawHouseTools(
           const content = validateStringParam(params, 'content', true);
           const taskId = validateStringParam(params, 'taskId', false);
           const result = await client.sendMessage({ content, taskId });
-          return textResult(result);
+
+          return formatConfirmation(
+            `Message sent${taskId ? ` to task ${taskId}` : ''}`,
+            [
+              'Message delivered to the human',
+              taskId ? 'Continue working on the task or wait for response' : 'Check for response with task messages'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -187,7 +271,14 @@ export function createClawHouseTools(
           const taskId = validateStringParam(params, 'taskId', true);
           const deliverable = validateStringParam(params, 'deliverable', true);
           const result = await client.updateDeliverable({ taskId, deliverable });
-          return textResult(result);
+
+          return formatConfirmation(
+            `Updated deliverable for task ${taskId}`,
+            [
+              'Deliverable has been saved',
+              'Continue working or request review with clawhouse_request_review when ready'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -200,7 +291,16 @@ export function createClawHouseTools(
           const taskId = validateStringParam(params, 'taskId', true);
           const comment = validateStringParam(params, 'comment', false);
           const result = await client.requestReview({ taskId, comment });
-          return textResult(result);
+
+          return formatTaskResponse(
+            result,
+            `Submitted task "${result.title}" for review`,
+            [
+              'Task is now waiting for human review',
+              'Remember to terminate any sub-agents working on this task',
+              'You can send additional messages with clawhouse_send_message'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -212,7 +312,21 @@ export function createClawHouseTools(
         try {
           const status = validateStringParam(params, 'status', false);
           const result = await client.listTasks({ status });
-          return textResult(result);
+
+          const readyForBot = result.tasks.filter(t => t.status === 'ready_for_bot');
+          const nextActions: string[] = [];
+
+          if (readyForBot.length > 0) {
+            nextActions.push(`${readyForBot.length} task(s) ready for bot - claim one with clawhouse_claim_task`);
+          } else {
+            nextActions.push('No tasks ready for bot. Create a new task with clawhouse_create_task if needed');
+          }
+
+          return formatListResponse(
+            result.tasks,
+            `Found ${result.tasks.length} task(s)${status ? ` with status "${status}"` : ''} (${readyForBot.length} ready for bot)`,
+            nextActions
+          );
         } catch (err) {
           return errorResult(err);
         }
@@ -225,7 +339,15 @@ export function createClawHouseTools(
           const title = validateStringParam(params, 'title', true);
           const instructions = validateStringParam(params, 'instructions', false);
           const result = await client.createTask({ title, instructions });
-          return textResult(result);
+
+          return formatTaskResponse(
+            result.task,
+            `Created task "${result.task.title}" with ID ${result.task.taskId}`,
+            [
+              'Claim this task with clawhouse_claim_task to start working on it',
+              'Or list all tasks with clawhouse_list_tasks'
+            ]
+          );
         } catch (err) {
           return errorResult(err);
         }
