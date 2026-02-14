@@ -20,6 +20,90 @@ const WS_PONG_TIMEOUT_MS = 10 * 1000; // 10s timeout waiting for pong response
 const BACKOFF_INITIAL_MS = 2000;
 const BACKOFF_MAX_MS = 30000;
 const BACKOFF_FACTOR = 1.8;
+const HEALTH_LOG_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
+
+interface ConnectionHealth {
+  connectionStartTime: number;
+  totalReconnects: number;
+  lastReconnectAt: number | null;
+  avgReconnectInterval: number;
+  totalMessagesDelivered: number;
+  lastMessageAt: number | null;
+  currentMode: 'websocket' | 'polling';
+}
+
+// Module-level health state persists across reconnects
+const healthState = new Map<string, ConnectionHealth>();
+
+function initializeHealth(accountId: string): void {
+  if (!healthState.has(accountId)) {
+    healthState.set(accountId, {
+      connectionStartTime: Date.now(),
+      totalReconnects: 0,
+      lastReconnectAt: null,
+      avgReconnectInterval: 0,
+      totalMessagesDelivered: 0,
+      lastMessageAt: null,
+      currentMode: 'websocket'
+    });
+  }
+}
+
+function updateHealthMode(accountId: string, mode: 'websocket' | 'polling'): void {
+  const health = healthState.get(accountId);
+  if (health) {
+    health.currentMode = mode;
+  }
+}
+
+function recordReconnect(accountId: string): void {
+  const health = healthState.get(accountId);
+  if (health) {
+    const now = Date.now();
+    if (health.lastReconnectAt) {
+      const interval = now - health.lastReconnectAt;
+      health.avgReconnectInterval =
+        (health.avgReconnectInterval * health.totalReconnects + interval) / (health.totalReconnects + 1);
+    }
+    health.totalReconnects++;
+    health.lastReconnectAt = now;
+  }
+}
+
+function recordMessageDelivery(accountId: string, count: number): void {
+  const health = healthState.get(accountId);
+  if (health) {
+    health.totalMessagesDelivered += count;
+    health.lastMessageAt = Date.now();
+  }
+}
+
+function formatDuration(ms: number): string {
+  const seconds = Math.floor(ms / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const hours = Math.floor(minutes / 60);
+
+  if (hours > 0) {
+    return `${hours}h${minutes % 60}m`;
+  } else if (minutes > 0) {
+    return `${minutes}m${seconds % 60}s`;
+  } else {
+    return `${seconds}s`;
+  }
+}
+
+function logHealthSummary(accountId: string, log: PluginLogger): void {
+  const health = healthState.get(accountId);
+  if (!health) return;
+
+  const uptime = Date.now() - health.connectionStartTime;
+  log.info(
+    `ClawHouse health: uptime=${formatDuration(uptime)}, ` +
+    `reconnects=${health.totalReconnects}, ` +
+    `messages=${health.totalMessagesDelivered}, ` +
+    `mode=${health.currentMode}`
+  );
+}
 
 // Serialize poll operations per account to prevent duplicate message delivery.
 // Each account gets its own promise-chain mutex so polls don't block across accounts.
@@ -133,10 +217,25 @@ export async function startClawHouseConnection(
   const backoff: BackoffState = { attempt: 0 };
   let totalReconnects = 0;
 
+  // Initialize health tracking for this account
+  initializeHealth(ctx.accountId);
+
   log.info(
     `Starting ClawHouse connection for account ${ctx.accountId}` +
       (cursor ? ` (resuming from cursor ${cursor})` : ' (fresh start)'),
   );
+
+  // Start health logging timer
+  const healthInterval = setInterval(() => {
+    if (!ctx.abortSignal.aborted) {
+      logHealthSummary(ctx.accountId, log);
+    }
+  }, HEALTH_LOG_INTERVAL_MS);
+
+  // Clean up health interval on shutdown
+  ctx.abortSignal.addEventListener('abort', () => {
+    clearInterval(healthInterval);
+  }, { once: true });
 
   // Outer reconnection loop — runs until OpenClaw shuts down
   while (!ctx.abortSignal.aborted) {
@@ -146,9 +245,12 @@ export async function startClawHouseConnection(
 
       if (totalReconnects > 0) {
         log.info(`Got WS ticket, reconnecting to ${wsUrl}... (reconnect #${totalReconnects})`);
+        recordReconnect(ctx.accountId);
       } else {
         log.info(`Got WS ticket, connecting to ${wsUrl}...`);
       }
+
+      updateHealthMode(ctx.accountId, 'websocket');
 
       cursor = await runWebSocketConnection({
         ticket,
@@ -168,9 +270,12 @@ export async function startClawHouseConnection(
       // If ticket fetch fails, fall back to polling
       if (message.includes('API error') || message.includes('authentication failed') || message.includes('server error')) {
         log.warn(`Ticket fetch failed (attempt #${totalReconnects}): ${message}. Falling back to polling.`);
+        recordReconnect(ctx.accountId);
+        updateHealthMode(ctx.accountId, 'polling');
         cursor = await runPollingFallback({ client, ctx, cursor, log });
       } else {
         log.warn(`Connection error (attempt #${totalReconnects}): ${message}`);
+        recordReconnect(ctx.accountId);
       }
 
       if (ctx.abortSignal.aborted) break;
@@ -425,6 +530,7 @@ async function pollAndDeliver(
 
     // Save cursor after each successful delivery so a mid-batch
     // failure doesn't cause the entire batch to be re-delivered on retry.
+    let deliveredCount = 0;
     for (const message of response.items) {
       // Skip bot's own messages to prevent echo loops
       if (message.authorType === 'bot') {
@@ -432,6 +538,12 @@ async function pollAndDeliver(
         continue;
       }
       await deliverMessageToAgent(ctx, message, client);
+      deliveredCount++;
+    }
+
+    // Record message delivery in health stats
+    if (deliveredCount > 0) {
+      recordMessageDelivery(ctx.accountId, deliveredCount);
     }
 
     // Persist cursor
