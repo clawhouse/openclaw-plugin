@@ -441,17 +441,6 @@ export interface Task {
   deliverable?: string | null;
 }
 
-export interface Bot {
-  userId: string;
-  name: string;
-  description?: string | null;
-  isBot: boolean;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-  createdById: string;
-}
-
 export interface TasksListResponse {
   tasks: Task[];
 }
@@ -460,13 +449,3 @@ export interface CreateTaskResponse {
   task: Task;
 }
 
-export interface GetBotTokenResponse {
-  token: string;
-  userId: string;
-}
-
-export interface CreateBotResponse {
-  bot: Bot;
-  token: string;
-  userId: string;
-}

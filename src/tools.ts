@@ -4,6 +4,7 @@ import type {
   AnyAgentTool,
   OpenClawPluginApi,
   ResolvedClawHouseAccount,
+  Task,
 } from './types';
 
 /**
@@ -55,7 +56,7 @@ function textResult(data: unknown): {
   return { content: [{ type: 'text', text: JSON.stringify(data, null, 2) }] };
 }
 
-function formatTaskResponse(task: any, summary: string, nextActions: string[]): {
+function formatTaskResponse(task: Task, summary: string, nextActions: string[]): {
   content: Array<{ type: string; text: string }>;
 } {
   return {
@@ -70,7 +71,7 @@ function formatTaskResponse(task: any, summary: string, nextActions: string[]): 
   };
 }
 
-function formatListResponse(tasks: any[], summary: string, nextActions: string[]): {
+function formatListResponse(tasks: Task[], summary: string, nextActions: string[]): {
   content: Array<{ type: string; text: string }>;
 } {
   return {
@@ -178,93 +179,6 @@ function validateStringParam(
   }
   
   return value;
-}
-
-function validateNumberParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: true
-): number;
-function validateNumberParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: false
-): number | undefined;
-function validateNumberParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: boolean,
-  options?: { min?: number; max?: number; integer?: boolean }
-): number | undefined {
-  const value = params[key];
-  
-  if (value == null) {
-    if (required) {
-      throw new Error(`Required parameter '${key}' is missing`);
-    }
-    return undefined;
-  }
-  
-  const numValue = typeof value === 'string' ? parseFloat(value) : value;
-  
-  if (typeof numValue !== 'number' || isNaN(numValue)) {
-    throw new Error(`Parameter '${key}' must be a valid number, got ${typeof value}: ${value}`);
-  }
-  
-  if (options?.min !== undefined && numValue < options.min) {
-    throw new Error(`Parameter '${key}' must be >= ${options.min}, got ${numValue}`);
-  }
-  
-  if (options?.max !== undefined && numValue > options.max) {
-    throw new Error(`Parameter '${key}' must be <= ${options.max}, got ${numValue}`);
-  }
-  
-  if (options?.integer && !Number.isInteger(numValue)) {
-    throw new Error(`Parameter '${key}' must be an integer, got ${numValue}`);
-  }
-  
-  return numValue;
-}
-
-function validateBooleanParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: true
-): boolean;
-function validateBooleanParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: false
-): boolean | undefined;
-function validateBooleanParam(
-  params: Record<string, unknown>, 
-  key: string, 
-  required: boolean
-): boolean | undefined {
-  const value = params[key];
-  
-  if (value == null) {
-    if (required) {
-      throw new Error(`Required parameter '${key}' is missing`);
-    }
-    return undefined;
-  }
-  
-  if (typeof value === 'boolean') {
-    return value;
-  }
-  
-  if (typeof value === 'string') {
-    const lower = value.toLowerCase().trim();
-    if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'on') {
-      return true;
-    }
-    if (lower === 'false' || lower === '0' || lower === 'no' || lower === 'off') {
-      return false;
-    }
-  }
-  
-  throw new Error(`Parameter '${key}' must be a boolean (true/false), got ${typeof value}: ${value}`);
 }
 
 function validateEnumParam<T extends string>(
@@ -396,7 +310,7 @@ export function createClawHouseTools(
         try {
           const content = validateStringParam(params, 'content', true);
           const taskId = validateStringParam(params, 'taskId', false);
-          const result = await client.sendMessage({ content, taskId });
+          await client.sendMessage({ content, taskId });
 
           return formatConfirmation(
             `Message sent${taskId ? ` to task ${taskId}` : ''}`,
@@ -416,7 +330,7 @@ export function createClawHouseTools(
         try {
           const taskId = validateStringParam(params, 'taskId', true);
           const deliverable = validateStringParam(params, 'deliverable', true);
-          const result = await client.updateDeliverable({ taskId, deliverable });
+          await client.updateDeliverable({ taskId, deliverable });
 
           return formatConfirmation(
             `Updated deliverable for task ${taskId}`,
