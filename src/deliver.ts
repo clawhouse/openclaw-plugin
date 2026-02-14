@@ -217,13 +217,13 @@ async function fetchAndSaveMedia(
     });
 
     // Handle stream errors properly
-    nodeStream.on('error', (err) => {
+    nodeStream.on('error', () => {
       if (fileStream && !fileStream.destroyed) {
         fileStream.destroy();
       }
     });
 
-    fileStream.on('error', (err) => {
+    fileStream.on('error', () => {
       if (!nodeStream.destroyed) {
         nodeStream.destroy();
       }
