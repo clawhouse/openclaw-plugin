@@ -11,12 +11,12 @@ import type {
   ChannelLogoutContext,
   ChannelPlugin,
   ClawHouseChannelConfig,
+  OpenClawConfig,
   ResolvedClawHouseAccount,
 } from './types';
 
-function getChannelConfig(cfg: unknown): ClawHouseChannelConfig | null {
-  const c = cfg as { channels?: { clawhouse?: ClawHouseChannelConfig } };
-  return c?.channels?.clawhouse ?? null;
+function getChannelConfig(cfg: OpenClawConfig): ClawHouseChannelConfig | null {
+  return cfg?.channels?.clawhouse ?? null;
 }
 
 export const clawHousePlugin: ChannelPlugin = {
@@ -33,7 +33,7 @@ export const clawHousePlugin: ChannelPlugin = {
   },
 
   config: {
-    listAccountIds(cfg: unknown): string[] {
+    listAccountIds(cfg: OpenClawConfig): string[] {
       const ch = getChannelConfig(cfg);
       if (!ch) return [];
       if (ch.accounts && Object.keys(ch.accounts).length > 0) {
@@ -43,7 +43,7 @@ export const clawHousePlugin: ChannelPlugin = {
     },
 
     resolveAccount(
-      cfg: unknown,
+      cfg: OpenClawConfig,
       accountId?: string | null,
     ): ResolvedClawHouseAccount {
       const ch = getChannelConfig(cfg);

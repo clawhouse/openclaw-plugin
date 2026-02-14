@@ -7,33 +7,19 @@ import type {
 } from './types';
 
 /**
+ * Valid task status values for filtering
+ */
+const VALID_TASK_STATUSES = ['ready_for_bot', 'working_on_it', 'waiting_for_human', 'done'] as const;
+type TaskStatus = typeof VALID_TASK_STATUSES[number];
+
+/**
  * Resolve the ClawHouse account from the plugin config.
  * Shared logic with channel.ts — reads channels.clawhouse from config.
  */
 function resolveAccountFromConfig(
   api: OpenClawPluginApi,
 ): ResolvedClawHouseAccount | null {
-  const cfg = api.runtime.config.loadConfig() as {
-    channels?: {
-      clawhouse?: {
-        botToken?: string;
-        apiUrl?: string;
-        wsUrl?: string;
-        userId?: string;
-        enabled?: boolean;
-        accounts?: Record<
-          string,
-          {
-            botToken?: string;
-            apiUrl?: string;
-            wsUrl?: string;
-            userId?: string;
-            enabled?: boolean;
-          }
-        >;
-      };
-    };
-  };
+  const cfg = api.runtime.config.loadConfig();
 
   const ch = cfg?.channels?.clawhouse;
   if (!ch) return null;
@@ -116,6 +102,135 @@ function validateStringParam(
   }
   
   return value;
+}
+
+function validateNumberParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: true
+): number;
+function validateNumberParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: false
+): number | undefined;
+function validateNumberParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: boolean,
+  options?: { min?: number; max?: number; integer?: boolean }
+): number | undefined {
+  const value = params[key];
+  
+  if (value == null) {
+    if (required) {
+      throw new Error(`Required parameter '${key}' is missing`);
+    }
+    return undefined;
+  }
+  
+  const numValue = typeof value === 'string' ? parseFloat(value) : value;
+  
+  if (typeof numValue !== 'number' || isNaN(numValue)) {
+    throw new Error(`Parameter '${key}' must be a valid number, got ${typeof value}: ${value}`);
+  }
+  
+  if (options?.min !== undefined && numValue < options.min) {
+    throw new Error(`Parameter '${key}' must be >= ${options.min}, got ${numValue}`);
+  }
+  
+  if (options?.max !== undefined && numValue > options.max) {
+    throw new Error(`Parameter '${key}' must be <= ${options.max}, got ${numValue}`);
+  }
+  
+  if (options?.integer && !Number.isInteger(numValue)) {
+    throw new Error(`Parameter '${key}' must be an integer, got ${numValue}`);
+  }
+  
+  return numValue;
+}
+
+function validateBooleanParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: true
+): boolean;
+function validateBooleanParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: false
+): boolean | undefined;
+function validateBooleanParam(
+  params: Record<string, unknown>, 
+  key: string, 
+  required: boolean
+): boolean | undefined {
+  const value = params[key];
+  
+  if (value == null) {
+    if (required) {
+      throw new Error(`Required parameter '${key}' is missing`);
+    }
+    return undefined;
+  }
+  
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  
+  if (typeof value === 'string') {
+    const lower = value.toLowerCase().trim();
+    if (lower === 'true' || lower === '1' || lower === 'yes' || lower === 'on') {
+      return true;
+    }
+    if (lower === 'false' || lower === '0' || lower === 'no' || lower === 'off') {
+      return false;
+    }
+  }
+  
+  throw new Error(`Parameter '${key}' must be a boolean (true/false), got ${typeof value}: ${value}`);
+}
+
+function validateEnumParam<T extends string>(
+  params: Record<string, unknown>,
+  key: string,
+  allowedValues: readonly T[],
+  required: true
+): T;
+function validateEnumParam<T extends string>(
+  params: Record<string, unknown>,
+  key: string,
+  allowedValues: readonly T[],
+  required: false
+): T | undefined;
+function validateEnumParam<T extends string>(
+  params: Record<string, unknown>,
+  key: string,
+  allowedValues: readonly T[],
+  required: boolean
+): T | undefined {
+  const value = params[key];
+  
+  if (value == null) {
+    if (required) {
+      throw new Error(`Required parameter '${key}' is missing`);
+    }
+    return undefined;
+  }
+  
+  if (typeof value !== 'string') {
+    throw new Error(`Parameter '${key}' must be a string, got ${typeof value}`);
+  }
+  
+  if (required && value.trim() === '') {
+    throw new Error(`Required parameter '${key}' cannot be empty`);
+  }
+  
+  if (!allowedValues.includes(value as T)) {
+    throw new Error(`Parameter '${key}' must be one of: ${allowedValues.join(', ')}, got: ${value}`);
+  }
+  
+  return value as T;
 }
 
 /**
@@ -210,7 +325,7 @@ export function createClawHouseTools(
       ...TOOLS.LIST_TASKS,
       async execute(_id, params) {
         try {
-          const status = validateStringParam(params, 'status', false);
+          const status = validateEnumParam(params, 'status', VALID_TASK_STATUSES, false);
           const result = await client.listTasks({ status });
           return textResult(result);
         } catch (err) {

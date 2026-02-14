@@ -33,11 +33,29 @@ export interface OpenClawPluginToolOptions {
   optional?: boolean;
 }
 
+// Plugin configuration structure
+export interface OpenClawConfig {
+  channels?: {
+    clawhouse?: ClawHouseChannelConfig;
+    [key: string]: unknown;
+  };
+  plugins?: {
+    entries?: {
+      [pluginId: string]: {
+        enabled?: boolean;
+        [key: string]: unknown;
+      };
+    };
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 // Plugin API provided by OpenClaw at registration time
 export interface OpenClawPluginApi {
   runtime: PluginRuntime;
-  config: unknown;
-  pluginConfig: unknown;
+  config: OpenClawConfig;
+  pluginConfig: Record<string, unknown>;
   logger: PluginLogger;
   registerChannel(registration: { plugin: ChannelPlugin }): void;
   registerHttpRoute(params: {
@@ -56,8 +74,8 @@ export interface OpenClawPluginApi {
 // Subset of PluginRuntime we actually use
 export interface PluginRuntime {
   config: {
-    loadConfig(): unknown;
-    writeConfigFile(cfg: unknown): Promise<void>;
+    loadConfig(): OpenClawConfig;
+    writeConfigFile(cfg: OpenClawConfig): Promise<void>;
   };
   channel: {
     reply: {
@@ -66,9 +84,9 @@ export interface PluginRuntime {
       ): T & FinalizedMsgContext;
       dispatchReplyFromConfig(params: {
         ctx: FinalizedMsgContext;
-        cfg: unknown;
+        cfg: OpenClawConfig;
         dispatcher: ReplyDispatcher;
-        replyOptions?: unknown;
+        replyOptions?: Record<string, unknown>;
       }): Promise<{ queuedFinal: boolean }>;
       createReplyDispatcherWithTyping(params: {
         channel: string;
@@ -77,7 +95,7 @@ export interface PluginRuntime {
         [key: string]: unknown;
       }): {
         dispatcher: ReplyDispatcher;
-        replyOptions: unknown;
+        replyOptions: Record<string, unknown>;
         markDispatchIdle: () => void;
       };
     };
@@ -159,16 +177,16 @@ export interface ChannelCapabilities {
 }
 
 export interface ChannelConfigAdapter {
-  listAccountIds(cfg: unknown): string[];
+  listAccountIds(cfg: OpenClawConfig): string[];
   resolveAccount(
-    cfg: unknown,
+    cfg: OpenClawConfig,
     accountId?: string | null,
   ): ResolvedClawHouseAccount;
-  isConfigured?(account: ResolvedClawHouseAccount, cfg: unknown): boolean;
-  isEnabled?(account: ResolvedClawHouseAccount, cfg: unknown): boolean;
+  isConfigured?(account: ResolvedClawHouseAccount, cfg?: OpenClawConfig): boolean;
+  isEnabled?(account: ResolvedClawHouseAccount, cfg?: OpenClawConfig): boolean;
   describeAccount?(
     account: ResolvedClawHouseAccount,
-    cfg: unknown,
+    cfg?: OpenClawConfig,
   ): ChannelAccountSnapshot;
 }
 
@@ -176,7 +194,7 @@ export interface ChannelOutboundAdapter {
   deliveryMode: 'direct' | 'gateway' | 'hybrid';
   resolveTarget?(
     target: string,
-    ctx: { cfg: unknown; accountId?: string | null },
+    ctx: { cfg: OpenClawConfig; accountId?: string | null },
   ): { to: string } | null;
   sendText?(ctx: ChannelOutboundContext): Promise<OutboundDeliveryResult>;
   textChunkLimit?: number;
@@ -190,24 +208,24 @@ export interface ChannelGatewayAdapter {
 }
 
 export interface ChannelGatewayContext {
-  cfg: unknown;
+  cfg: OpenClawConfig;
   accountId: string;
   account: ResolvedClawHouseAccount;
-  runtime: unknown;
+  runtime: PluginRuntime;
   abortSignal: AbortSignal;
   log?: PluginLogger;
   getStatus(): ChannelAccountSnapshot;
-  setStatus(next: ChannelAccountSnapshot): void;
+  setStatus(next: Partial<ChannelAccountSnapshot>): void;
 }
 
 export interface ChannelSetupAdapter {
   applyAccountConfig(params: {
-    cfg: unknown;
+    cfg: OpenClawConfig;
     accountId: string;
     input: Record<string, string>;
-  }): unknown;
+  }): OpenClawConfig;
   validateInput?(params: {
-    cfg: unknown;
+    cfg: OpenClawConfig;
     accountId: string;
     input: Record<string, string>;
   }): string | null;
@@ -224,19 +242,19 @@ export interface ChannelSecurityDmPolicy {
 
 export interface ChannelSecurityAdapter {
   resolveDmPolicy?(ctx: {
-    cfg: unknown;
+    cfg: OpenClawConfig;
     accountId?: string | null;
     account: ResolvedClawHouseAccount;
   }): ChannelSecurityDmPolicy | null;
   collectWarnings?(ctx: {
-    cfg: unknown;
+    cfg: OpenClawConfig;
     accountId?: string | null;
     account: ResolvedClawHouseAccount;
   }): Promise<string[]> | string[];
 }
 
 export interface ChannelOutboundContext {
-  cfg: unknown;
+  cfg: OpenClawConfig;
   to: string;
   text: string;
   threadId?: string | number | null;
@@ -339,22 +357,22 @@ export interface ChannelOnboardingStatus {
 }
 
 export interface ChannelOnboardingResult {
-  cfg: unknown;
+  cfg: OpenClawConfig;
   accountId?: string;
 }
 
 export interface ChannelOnboardingAdapter {
   channel: string;
-  getStatus(ctx: { cfg: unknown }): Promise<ChannelOnboardingStatus>;
+  getStatus(ctx: { cfg: OpenClawConfig }): Promise<ChannelOnboardingStatus>;
   configure(ctx: {
-    cfg: unknown;
-    runtime: unknown;
+    cfg: OpenClawConfig;
+    runtime: PluginRuntime;
     prompter: WizardPrompter;
     accountOverrides: Record<string, string>;
     shouldPromptAccountIds: boolean;
     forceAllowFrom: boolean;
   }): Promise<ChannelOnboardingResult>;
-  disable?(cfg: unknown): unknown;
+  disable?(cfg: OpenClawConfig): OpenClawConfig;
 }
 
 // Status adapter types
@@ -375,11 +393,11 @@ export interface ChannelStatusAdapter {
   probeAccount?(params: {
     account: ResolvedClawHouseAccount;
     timeoutMs: number;
-    cfg: unknown;
+    cfg: OpenClawConfig;
   }): Promise<ChannelProbeResult>;
   buildAccountSnapshot?(params: {
     account: ResolvedClawHouseAccount;
-    cfg: unknown;
+    cfg: OpenClawConfig;
     runtime?: ChannelAccountSnapshot;
     probe?: ChannelProbeResult;
   }): ChannelAccountSnapshot;
@@ -390,10 +408,10 @@ export interface ChannelStatusAdapter {
 
 // Logout types
 export interface ChannelLogoutContext {
-  cfg: unknown;
+  cfg: OpenClawConfig;
   accountId: string;
   account: ResolvedClawHouseAccount;
-  runtime: unknown;
+  runtime: PluginRuntime;
   log?: PluginLogger;
 }
 
