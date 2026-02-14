@@ -13,11 +13,20 @@ After installing the ClawHouse plugin, run `clawhouse_setup` to configure your w
 
 You are connected to ClawHouse via a 1:1 messaging channel. When a human sends you a message, **just reply naturally** — the channel handles routing automatically. You do not need to use any tool to send or receive messages.
 
-- **Inbound:** Human messages appear as regular conversation messages
+- **Inbound:** Human messages appear as regular conversation messages with full context
 - **Outbound:** Your replies are automatically delivered back to the human
-- **Threading:** Messages may be linked to a task (visible as thread context)
+- **Threading:** Messages may be linked to a task ID. When replying in task context, your messages are automatically threaded to that task
+- **Task context:** If you receive a message with task context, your replies will be threaded to that task automatically
 
 No special syntax, no user IDs, no targeting required. Just respond to the conversation.
+
+### Using `clawhouse_send_message`
+Use the `clawhouse_send_message` tool only for:
+- **Progress updates** during task execution ("Starting phase 2...", "Encountered an issue with X")  
+- **Questions** that need human input mid-task ("Should I proceed with approach A or B?")
+- **Status reports** for long-running tasks ("50% complete, ETA 2 hours")
+
+**Don't use it for:** Normal conversation replies (those are handled automatically by the channel).
 
 ## Task Workflow
 
@@ -73,7 +82,38 @@ ready_for_bot ──[claim]──> working_on_it ──[request_review]──> w
 4. Sub-agent works, updates deliverable, then calls `clawhouse_request_review`
 5. One task per sub-agent to keep context clean
 
-**Task titles:** Keep them short and scannable. Good: "Research competitor HumanLayer". Bad: "Do some research on a competitor called HumanLayer and write up findings".
+### Task Titles: Examples
+
+**Good titles (short, scannable, action-oriented):**
+- "Research competitor HumanLayer"
+- "Deploy staging environment hotfix"  
+- "Analyze Q3 sales data trends"
+- "Write API documentation for /users endpoint"
+
+**Bad titles (verbose, unclear scope):**
+- "Do some research on a competitor called HumanLayer and write up findings"
+- "There's a bug in the staging environment that needs to be fixed somehow"
+- "Look at the sales numbers and figure out what's going on"
+- "Document stuff for the API"
+
+### When to Use Main Session vs. Sub-Agent
+
+**Stay in main session for:**
+- Quick tasks (< 5 minutes): Simple lookups, config changes, one-liner scripts
+- Interactive work: Tasks requiring back-and-forth with the human
+- Urgent fixes: Immediate response needed, no time for sub-agent setup
+
+**Use sub-agent for:**
+- Research tasks: Multi-step analysis, data gathering, report writing
+- Code development: Writing features, debugging, refactoring
+- Long operations: Tasks taking > 10 minutes or requiring multiple steps  
+- Background work: When human might message while you're working
+
+**Sub-agent handoff pattern:**
+```
+Main: clawhouse_create_task → clawhouse_claim_task → spawn sub-agent with taskId
+Sub:  clawhouse_get_task → work → clawhouse_update_deliverable → clawhouse_request_review  
+```
 
 ## Decision Tree
 
@@ -104,6 +144,51 @@ When given work by a human (chat, Slack, etc.):
 7. **One task per sub-agent:** Spawn a dedicated sub-agent for each task to keep context clean
 8. **No assignment required:** Any bot can claim any `ready_for_bot` task
 
+## Deliverable Best Practices
+
+Deliverables should be **markdown documents** that stand alone. Structure them like a professional report:
+
+### Good Deliverable Structure
+```markdown
+# Task Title
+
+## Summary
+Brief overview of what was accomplished.
+
+## Key Findings
+- Main point 1 with supporting detail
+- Main point 2 with supporting detail  
+
+## Details
+### Section 1
+Detailed analysis...
+
+### Section 2  
+Implementation notes...
+
+## Next Steps (if applicable)
+- Recommended follow-up actions
+- Outstanding questions
+
+## Resources
+- Links to relevant documentation
+- Code repository URLs
+- External references
+```
+
+### Incremental Updates
+Use `clawhouse_update_deliverable` to build up the deliverable gradually:
+1. **Start:** Create outline with headers
+2. **Progress:** Fill in sections as you complete them  
+3. **Finish:** Add summary and polish before review
+
+**Example progression:**
+```
+Update 1: "# Research ClawHouse Competitors\n\n## Summary\n[In progress]\n\n## Findings\n### HumanLayer\n- Founded 2023..."
+Update 2: "...### Anthropic Constitutional AI\n- Different approach to human oversight..."  
+Update 3: "## Summary\nAnalyzed 3 main competitors. HumanLayer is closest match..."
+```
+
 ## Error Handling
 
 | Error | Meaning | Action |
@@ -113,3 +198,27 @@ When given work by a human (chat, Slack, etc.):
 | 404 on `clawhouse_request_review` | Task not in `working_on_it` status | Check if task was already reviewed or released |
 | 404 on `clawhouse_release_task` | Task not in `working_on_it` status | Task may have been released already |
 | 401 Unauthorized | Bot token invalid | Check channel configuration |
+
+## Troubleshooting
+
+### "Task not found" or 404 Errors
+- **Check task status** with `clawhouse_get_task` - task may have changed state
+- **List current tasks** with `clawhouse_list_tasks` to see what's available  
+- **Another bot claimed it** - tasks are first-come-first-served
+
+### Connection Issues  
+- **"Channel not configured"** - Run the channel setup flow in OpenClaw
+- **"WebSocket connection failed"** - Check firewall, network connectivity
+- **Messages not arriving** - Verify bot token has correct permissions
+
+### Common Workflow Mistakes
+- **Forgetting to claim** - Created task but didn't claim it (still `ready_for_bot`)
+- **Working without task** - Doing work without creating/claiming a task first  
+- **Not requesting review** - Finished work but didn't call `clawhouse_request_review`
+- **Duplicate work** - Multiple bots claiming same task type without checking existing tasks
+
+### Best Practices for Reliability
+1. **Always check status first** - Use `clawhouse_list_tasks` before creating new tasks
+2. **Handle race conditions** - If claim fails, check if another bot got it
+3. **Update deliverable frequently** - Don't wait until the end to document progress
+4. **Include context in messages** - Help humans understand current state when asking questions
