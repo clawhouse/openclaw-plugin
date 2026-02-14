@@ -111,6 +111,7 @@ export const clawHousePlugin: ChannelPlugin = {
 
       const acct = clawHousePlugin.config.resolveAccount(cfg, ctx.accountId);
       const client = new ClawHouseClient(acct.botToken, acct.apiUrl);
+      const log = runtime.logging.createLogger('clawhouse');
 
       try {
         await client.sendMessage({
@@ -122,8 +123,14 @@ export const clawHousePlugin: ChannelPlugin = {
           success: true,
           threadId: ctx.threadId ? String(ctx.threadId) : undefined,
         };
-      } catch {
-        return { channel: 'clawhouse', success: false };
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        log.error(`Failed to send message: ${message}`);
+        return { 
+          channel: 'clawhouse', 
+          success: false,
+          error: message
+        };
       }
     },
   },
@@ -228,11 +235,21 @@ export const clawHousePlugin: ChannelPlugin = {
       if (typeof input.botToken !== 'string') {
         return 'Bot token must be a string';
       }
-      if (!input.botToken.startsWith('bot_')) {
+      const botTokenTrimmed = input.botToken.trim();
+      if (botTokenTrimmed !== input.botToken) {
+        return 'Bot token must not have leading or trailing whitespace';
+      }
+      if (!botTokenTrimmed.startsWith('bot_')) {
         return 'Bot token must start with "bot_"';
       }
-      if (input.botToken.length < 10) {
+      if (botTokenTrimmed.length < 10) {
         return 'Bot token appears to be too short (minimum 10 characters)';
+      }
+      if (botTokenTrimmed.length > 100) {
+        return 'Bot token appears to be too long (maximum 100 characters)';
+      }
+      if (!/^bot_[a-zA-Z0-9_-]+$/.test(botTokenTrimmed)) {
+        return 'Bot token contains invalid characters (only alphanumeric, underscore, and dash allowed after "bot_")';
       }
       
       // Validate API URL
@@ -242,13 +259,28 @@ export const clawHousePlugin: ChannelPlugin = {
       if (typeof input.apiUrl !== 'string') {
         return 'API URL must be a string';
       }
+      const apiUrlTrimmed = input.apiUrl.trim();
+      if (apiUrlTrimmed !== input.apiUrl) {
+        return 'API URL must not have leading or trailing whitespace';
+      }
       try {
-        const apiUrl = new URL(input.apiUrl);
+        const apiUrl = new URL(apiUrlTrimmed);
         if (apiUrl.protocol !== 'https:') {
-          return 'API URL must use HTTPS protocol';
+          return 'API URL must use HTTPS protocol for security';
         }
-      } catch {
-        return 'API URL must be a valid URL';
+        if (!apiUrl.hostname) {
+          return 'API URL must have a valid hostname';
+        }
+        if (apiUrl.hostname === 'localhost' || apiUrl.hostname === '127.0.0.1') {
+          return 'API URL cannot use localhost (use a publicly accessible URL)';
+        }
+        if (apiUrl.pathname && !apiUrl.pathname.endsWith('/')) {
+          // Warn if path doesn't end with slash but don't fail validation
+          // since the client will normalize this
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid URL format';
+        return `API URL must be a valid URL: ${message}`;
       }
       
       // Validate WebSocket URL
@@ -258,13 +290,29 @@ export const clawHousePlugin: ChannelPlugin = {
       if (typeof input.wsUrl !== 'string') {
         return 'WebSocket URL must be a string';
       }
+      const wsUrlTrimmed = input.wsUrl.trim();
+      if (wsUrlTrimmed !== input.wsUrl) {
+        return 'WebSocket URL must not have leading or trailing whitespace';
+      }
       try {
-        const wsUrl = new URL(input.wsUrl);
+        const wsUrl = new URL(wsUrlTrimmed);
         if (!['ws:', 'wss:'].includes(wsUrl.protocol)) {
           return 'WebSocket URL must use ws:// or wss:// protocol';
         }
-      } catch {
-        return 'WebSocket URL must be a valid URL';
+        if (!wsUrl.hostname) {
+          return 'WebSocket URL must have a valid hostname';
+        }
+        if (wsUrl.hostname === 'localhost' || wsUrl.hostname === '127.0.0.1') {
+          return 'WebSocket URL cannot use localhost (use a publicly accessible URL)';
+        }
+        // Recommend wss:// for security if using ws://
+        if (wsUrl.protocol === 'ws:' && wsUrl.hostname !== 'localhost') {
+          // This is just a recommendation, not a hard failure
+          // Most production deployments should use wss://
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Invalid URL format';
+        return `WebSocket URL must be a valid URL: ${message}`;
       }
       
       // Validate User ID
@@ -274,8 +322,19 @@ export const clawHousePlugin: ChannelPlugin = {
       if (typeof input.userId !== 'string') {
         return 'User ID must be a string';
       }
-      if (!/^[UBPT][A-Z0-9]{10}$/i.test(input.userId)) {
-        return 'User ID must be a valid ClawHouse ID (e.g. U9QF3C6X1A)';
+      const userIdTrimmed = input.userId.trim().toUpperCase();
+      if (userIdTrimmed !== input.userId.toUpperCase()) {
+        return 'User ID must not have leading or trailing whitespace and should be uppercase';
+      }
+      if (!/^[UBPT][A-Z0-9]{10}$/.test(userIdTrimmed)) {
+        const prefix = userIdTrimmed.charAt(0);
+        if (!'UBPT'.includes(prefix)) {
+          return 'User ID must start with U, B, P, or T (got: ' + prefix + ')';
+        }
+        if (userIdTrimmed.length !== 11) {
+          return `User ID must be exactly 11 characters long (got: ${userIdTrimmed.length})`;
+        }
+        return 'User ID must be a valid ClawHouse ID format: one letter (U/B/P/T) + 10 alphanumeric characters (e.g. U9QF3C6X1A)';
       }
       
       return null;
