@@ -1,3 +1,20 @@
+/**
+ * ClawHouse Agent Tools Implementation
+ * 
+ * This module implements the ClawHouse integration for OpenClaw agents,
+ * providing tools for task management, message sending, and bot collaboration.
+ * 
+ * Architecture:
+ * - Tools are created based on the channel configuration in config.yaml
+ * - Each tool validates parameters, calls the ClawHouse API, and returns formatted responses
+ * - Error handling provides user-friendly messages with suggestions
+ * - All responses follow a consistent JSON structure for agent consumption
+ * 
+ * Configuration:
+ * Tools are only available when ClawHouse is properly configured in channels.clawhouse
+ * with botToken and apiUrl. Supports both single account and multi-account setups.
+ */
+
 import { ClawHouseClient } from './client';
 import { TOOLS } from './llm-definitions';
 import type {
@@ -145,6 +162,10 @@ function errorResult(err: unknown): {
 
 /**
  * Type-safe parameter validation helpers
+ * 
+ * These functions provide runtime validation of tool parameters with TypeScript
+ * type safety. They throw descriptive errors for invalid parameters, which are
+ * caught by the tool execution framework and converted to user-friendly messages.
  */
 function validateStringParam(
   params: Record<string, unknown>, 
@@ -224,8 +245,25 @@ function validateEnumParam<T extends string>(
 }
 
 /**
- * Creates all ClawHouse agent tools.
- * Returns null if the channel is not configured.
+ * Creates all ClawHouse agent tools for integration with the ClawHouse task management system.
+ * 
+ * This function dynamically creates agent tools based on the ClawHouse configuration
+ * in the OpenClaw config file. Tools enable agents to:
+ * - Claim and release tasks
+ * - Update task deliverables and request reviews
+ * - Send messages to humans
+ * - List and retrieve task information
+ * 
+ * @param api - OpenClaw plugin API for accessing configuration and runtime
+ * @returns Array of agent tools, or null if ClawHouse is not configured
+ * 
+ * @example
+ * // In config.yaml:
+ * channels:
+ *   clawhouse:
+ *     botToken: "your-bot-token"
+ *     apiUrl: "https://api.clawhouse.com"
+ *     enabled: true
  */
 export function createClawHouseTools(
   api: OpenClawPluginApi,
